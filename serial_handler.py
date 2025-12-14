@@ -107,4 +107,53 @@ class SerialHandler:
     def is_connected(self) -> bool:
         """检查串口是否已连接"""
         return self.serial_connection is not None and self.serial_connection.is_open
+    
+    def hardware_test(self, num_vibrators: int = 8, test_duration: float = 1.0) -> bool:
+        """
+        硬件测试：依次测试所有振动器
+        
+        Args:
+            num_vibrators: 振动器数量，默认8个（编号0-7）
+            test_duration: 每个振动器的测试时长（秒），默认1秒
+        
+        Returns:
+            测试是否成功完成
+        """
+        if not self.serial_connection or not self.serial_connection.is_open:
+            logger.error("Serial port is not connected, cannot perform hardware test")
+            return False
+        
+        logger.info("=" * 60)
+        logger.info("🔧 Starting hardware test for all vibrators...")
+        logger.info(f"  Total vibrators: {num_vibrators} (ID: 0-{num_vibrators-1})")
+        logger.info(f"  Test duration per vibrator: {test_duration} seconds")
+        logger.info(f"  Intensity: 255 (HIGH)")
+        logger.info("=" * 60)
+        
+        try:
+            for vibrator_id in range(num_vibrators):
+                # 启动震动
+                start_message = f"{vibrator_id} 255\n"
+                self.serial_connection.write(start_message.encode('utf-8'))
+                logger.info(f"✓ Vibrator {vibrator_id}: START (255) - {start_message.strip()}")
+                
+                # 等待指定时长
+                time.sleep(test_duration)
+                
+                # 停止震动
+                stop_message = f"{vibrator_id} 0\n"
+                self.serial_connection.write(stop_message.encode('utf-8'))
+                logger.info(f"✓ Vibrator {vibrator_id}: STOP (0) - {stop_message.strip()}")
+                
+                # 短暂间隔，避免震动器切换过快
+                time.sleep(0.2)
+            
+            logger.info("=" * 60)
+            logger.info("✅ Hardware test completed successfully!")
+            logger.info("=" * 60)
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Hardware test failed: {e}")
+            return False
 
