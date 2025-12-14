@@ -5,6 +5,10 @@ import json
 from typing import Optional
 from models import Target, GameData
 from openai import OpenAI
+from dotenv import load_dotenv
+
+# 加载.env文件中的环境变量
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
