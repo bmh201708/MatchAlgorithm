@@ -5,6 +5,7 @@ import sys
 from threat_analyzer import find_most_threatening_target
 from serial_handler import SerialHandler
 from udp_server import UDPServer
+from direction_mapper import calculate_motor_for_target
 
 # 配置日志
 logging.basicConfig(
@@ -17,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 # 全局变量，用于优雅退出
 running = True
-vibrator_id = 0  # 固定使用振动器编号0
 
 
 def signal_handler(sig, frame):
@@ -132,8 +132,24 @@ def main():
             # 计算震动强度
             intensity = calculate_vibration_intensity(threat_score, max_threat_score)
             
+            # 计算敌人方向对应的马达编号
+            motor_id, direction_angle, direction_desc = calculate_motor_for_target(
+                game_data.playerPosition,
+                most_threatening.position
+            )
+            
+            # 打印方向分析结果
+            logger.info("─" * 60)
+            logger.info("🎯 Threat Direction Analysis")
+            logger.info(f"  Most threatening target: ID={most_threatening.id}, Type={most_threatening.type}")
+            logger.info(f"  Target position: ({most_threatening.position.x:.2f}, {most_threatening.position.y:.2f}, {most_threatening.position.z:.2f})")
+            logger.info(f"  Direction angle: {direction_angle:.2f}°")
+            logger.info(f"  Selected motor: #{motor_id} - {direction_desc}")
+            logger.info(f"  Vibration intensity: {intensity}")
+            logger.info("─" * 60)
+            
             # 发送震动信号
-            success = serial_handler.send_vibration(vibrator_id, intensity)
+            success = serial_handler.send_vibration(motor_id, intensity)
             
             if not success:
                 logger.error("Failed to send vibration signal")
