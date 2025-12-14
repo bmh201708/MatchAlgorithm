@@ -73,6 +73,19 @@ def main():
         udp_server.stop()
         sys.exit(1)
     
+    # 询问用户是否进行硬件测试
+    print("\n" + "=" * 60)
+    print("🔧 硬件测试选项")
+    print("=" * 60)
+    user_input = input("是否进行硬件测试？(Y/N): ").strip().upper()
+    
+    if user_input == 'Y':
+        logger.info("User chose to perform hardware test")
+        if not serial_handler.hardware_test(num_vibrators=8, test_duration=1.0):
+            logger.warning("Hardware test failed, but continuing with main program...")
+    else:
+        logger.info("User skipped hardware test")
+    
     logger.info("System initialized successfully. Waiting for data...")
     
     try:
