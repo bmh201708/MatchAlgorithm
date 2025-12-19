@@ -123,6 +123,62 @@ class SerialHandler:
             logger.error(f"Failed to send vibration signal: {e}")
             return False
     
+    def send_multi_vibration(self, intensities: list, duration: float = 3.0, mode: int = 0) -> bool:
+        """
+        同时发送多个马达的震动信号（用于态势感知模式）
+        
+        Args:
+            intensities: 8个马达的震动强度列表（0-255）
+            duration: 震动持续时间（秒），默认3.0秒
+            mode: 震动模式（0-3），默认0
+        
+        Returns:
+            发送是否成功
+        """
+        if not self.serial_connection or not self.serial_connection.is_open:
+            logger.error("Serial port is not connected")
+            return False
+        
+        if len(intensities) != 8:
+            logger.error(f"Invalid intensities length: {len(intensities)}, expected 8")
+            return False
+        
+        try:
+            logger.info("=" * 60)
+            logger.info("🌐 态势感知模式 - 多马达同时震动")
+            logger.info(f"  震动模式: {mode}")
+            logger.info(f"  持续时间: {duration}s")
+            logger.info("  各方向震动强度:")
+            
+            # 方向描述
+            directions = ["北(0)", "东北(1)", "东(2)", "东南(3)", "南(4)", "西南(5)", "西(6)", "西北(7)"]
+            
+            # 发送所有马达的启动信号
+            for motor_id in range(8):
+                intensity = int(intensities[motor_id])
+                if intensity > 0:
+                    start_message = f"{motor_id},{intensity},{mode}\n"
+                    self.serial_connection.write(start_message.encode('utf-8'))
+                    logger.info(f"    {directions[motor_id]}: 强度 {intensity}")
+            
+            logger.info("─" * 60)
+            
+            # 等待指定时长
+            time.sleep(duration)
+            
+            # 发送所有马达的停止信号
+            for motor_id in range(8):
+                stop_message = f"{motor_id},0,0\n"
+                self.serial_connection.write(stop_message.encode('utf-8'))
+            
+            logger.info("✓ 态势感知震动完成")
+            logger.info("=" * 60)
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to send multi-motor vibration signals: {e}")
+            return False
+    
     def is_connected(self) -> bool:
         """检查串口是否已连接"""
         return self.serial_connection is not None and self.serial_connection.is_open
