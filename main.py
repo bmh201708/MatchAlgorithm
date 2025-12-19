@@ -27,31 +27,6 @@ def signal_handler(sig, frame):
     running = False
 
 
-def calculate_vibration_intensity(threat_score: float, max_threat_score: float) -> int:
-    """
-    根据威胁度计算震动强度
-    
-    Args:
-        threat_score: 当前目标的威胁度
-        max_threat_score: 最大可能的威胁度（用于归一化）
-    
-    Returns:
-        震动强度：255（高威胁）或200（低威胁）
-    """
-    if max_threat_score == 0:
-        return 200
-    
-    # 归一化威胁度（0-1）
-    normalized_threat = threat_score / max_threat_score
-    
-    # 如果威胁度超过阈值，使用高强度，否则使用低强度
-    # 阈值设为0.5（可根据实际需求调整）
-    if normalized_threat > 0.5:
-        return 255
-    else:
-        return 200
-
-
 def main():
     """主函数"""
     global running
@@ -118,25 +93,23 @@ def main():
                 logger.warning("Could not determine most threatening target")
                 continue
             
-            # 计算威胁度分数（用于决定震动强度）
-            from threat_analyzer import calculate_threat_score
-            threat_score = calculate_threat_score(
-                most_threatening, 
-                game_data.playerPosition
-            )
-            
-            # 估算最大威胁度（用于归一化）
-            # Tank在正前方距离1时的威胁度作为参考
-            max_threat_score = (1.0 / (1 + 1)) * (1.0 / (0 + 1)) * 2.0  # = 1.0
-            
-            # 计算震动强度
-            intensity = calculate_vibration_intensity(threat_score, max_threat_score)
-            
             # 计算敌人方向对应的马达编号
             motor_id, direction_angle, direction_desc = calculate_motor_for_target(
                 game_data.playerPosition,
                 most_threatening.position
             )
+            
+            # 根据敌人类型选择震动模式
+            # Tank: 模式0 (持续震动)
+            # Soldier: 模式1 (超快脉冲)
+            vibration_mode = 0 if most_threatening.type == "Tank" else 1
+            mode_name = "持续震动" if vibration_mode == 0 else "超快脉冲"
+            
+            # 固定使用最高强度
+            intensity = 255
+            
+            # 固定震动持续时间为3秒
+            duration = 3.0
             
             # 打印方向分析结果
             logger.info("─" * 60)
@@ -145,11 +118,13 @@ def main():
             logger.info(f"  Target position: ({most_threatening.position.x:.2f}, {most_threatening.position.y:.2f}, {most_threatening.position.z:.2f})")
             logger.info(f"  Direction angle: {direction_angle:.2f}°")
             logger.info(f"  Selected motor: #{motor_id} - {direction_desc}")
-            logger.info(f"  Vibration intensity: {intensity}")
+            logger.info(f"  Vibration intensity: {intensity} (HIGH)")
+            logger.info(f"  Vibration mode: {vibration_mode} ({mode_name})")
+            logger.info(f"  Duration: {duration}s")
             logger.info("─" * 60)
             
             # 发送震动信号
-            success = serial_handler.send_vibration(motor_id, intensity)
+            success = serial_handler.send_vibration(motor_id, intensity, duration, vibration_mode)
             
             if not success:
                 logger.error("Failed to send vibration signal")
