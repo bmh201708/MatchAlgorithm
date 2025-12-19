@@ -2,6 +2,7 @@
 import logging
 import signal
 import sys
+import time
 from threat_analyzer import find_most_threatening_target
 from serial_handler import SerialHandler
 from udp_server import UDPServer
@@ -114,28 +115,44 @@ def main():
                 logger.warning("No targets in received data, skipping...")
                 continue
             
-            # 检查是否收到态势感知信号
-            if game_data.situationAwareness:
-                # ========== 态势感知模式（临时触发，3秒后自动结束）==========
-                logger.info("🌐 收到态势感知信号，临时切换到态势感知模式（3秒）")
-                
-                # 计算所有方向的威胁度
+            # ========== 步骤1：检查round是否已存在 ==========
+            round_exists = csv_logger.check_round_exists(game_data.round) if csv_logger else False
+            
+            if not round_exists:
+                # ========== 步骤2：计算威胁数据 ==========
+                logger.info(f"📝 Round {game_data.round} is new, calculating threat data...")
+                most_threatening = find_most_threatening_target(game_data)
                 direction_threats = calculate_all_directions_threat(game_data)
                 
-                # 找出最具威胁的目标（用于CSV记录）
-                most_threatening = find_most_threatening_target(game_data)
-                
-                # 记录到CSV
+                # ========== 步骤3：写入CSV ==========
                 if csv_logger:
                     csv_logger.log_round_data(
                         round_number=game_data.round,
                         most_threatening_target=most_threatening,
                         direction_threats=direction_threats
                     )
+                    logger.info(f"✓ Round {game_data.round} data saved to CSV")
+            else:
+                logger.info(f"📋 Round {game_data.round} already exists in CSV, skipping calculation")
+            
+            # ========== 步骤4：从CSV读取数据 ==========
+            round_data = csv_logger.read_round_data(game_data.round) if csv_logger else None
+            
+            if not round_data:
+                logger.error(f"Failed to read round {game_data.round} data from CSV, skipping vibration")
+                continue
+            
+            # ========== 步骤5：根据situationAwareness信号决定震动模式 ==========
+            if game_data.situationAwareness:
+                # ========== 态势感知模式（从CSV读取数据）==========
+                logger.info("🌐 收到态势感知信号，临时切换到态势感知模式（3秒）")
+                
+                # 从CSV读取的数据中获取8个方向的威胁值
+                direction_threats = round_data['direction_threats']
                 
                 # 将威胁度映射到震动强度
                 intensities = normalize_threat_to_intensity(
-                    direction_threats,
+                    {i: threat for i, threat in enumerate(direction_threats)},
                     min_intensity=0,
                     max_intensity=255,
                     threshold=0.01
@@ -158,40 +175,37 @@ def main():
                     logger.info("✓ 态势感知震动已发送，将持续3秒后自动结束")
                     logger.info("─" * 60)
             else:
-                # ========== 单目标模式（原有逻辑）==========
-                # 找出最有威胁的目标
-                most_threatening = find_most_threatening_target(game_data)
+                # ========== 单目标模式（从CSV读取数据）==========
+                # 从CSV读取的数据中获取威胁目标信息
+                threat_id = round_data['threat_enemy_id']
+                threat_type = round_data['threat_enemy_type']
                 
-                if most_threatening is None:
-                    logger.warning("Could not determine most threatening target")
+                # 检查是否有有效的威胁目标
+                if threat_id == "N/A" or threat_type == "N/A":
+                    logger.warning("No valid threatening target in round data, skipping vibration")
                     continue
                 
-                # 计算所有方向的威胁度（用于CSV记录）
-                direction_threats = calculate_all_directions_threat(game_data)
+                # 从CSV读取数据
+                threat_distance = float(round_data['threat_enemy_distance'])
+                threat_angle = float(round_data['threat_enemy_angle'])
+                threat_x = float(round_data['threat_enemy_x'])
+                threat_y = float(round_data['threat_enemy_y'])
+                threat_z = float(round_data['threat_enemy_z'])
                 
-                # 记录到CSV
-                if csv_logger:
-                    csv_logger.log_round_data(
-                        round_number=game_data.round,
-                        most_threatening_target=most_threatening,
-                        direction_threats=direction_threats
-                    )
-                
-                # 计算敌人方向对应的马达编号
+                # 使用CSV中的位置数据计算马达编号
+                from models import Position
+                threat_position = Position(x=threat_x, y=threat_y, z=threat_z)
                 motor_id, direction_angle, direction_desc = calculate_motor_for_target(
                     game_data.playerPosition,
-                    most_threatening.position
+                    threat_position
                 )
-                
-                # 获取目标距离
-                target_distance = most_threatening.distance
                 
                 # 第一阶段：根据目标类别选择震动模式
                 # IFV: 模式0, Soldier: 模式2
-                if most_threatening.type.lower() == "ifv":
+                if threat_type.lower() == "ifv":
                     type_mode = 0
                     type_mode_name = "持续震动"
-                elif most_threatening.type.lower() == "soldier":
+                elif threat_type.lower() == "soldier":
                     type_mode = 2
                     type_mode_name = "模式2"
                 else:
@@ -201,10 +215,10 @@ def main():
                 
                 # 第二阶段：根据目标距离选择震动模式
                 # <10m: 模式0, 10-20m: 模式2, >20m: 模式3
-                if target_distance < 10:
+                if threat_distance < 10:
                     distance_mode = 0
                     distance_mode_name = "持续震动 (<10m)"
-                elif target_distance <= 20:
+                elif threat_distance <= 20:
                     distance_mode = 2
                     distance_mode_name = "模式2 (10-20m)"
                 else:
@@ -217,10 +231,10 @@ def main():
                 
                 # 打印威胁分析结果
                 logger.info("─" * 60)
-                logger.info("🎯 单目标模式 - 两阶段震动")
-                logger.info(f"  最具威胁目标: ID={most_threatening.id}, Type={most_threatening.type}")
-                logger.info(f"  目标位置: ({most_threatening.position.x:.2f}, {most_threatening.position.y:.2f}, {most_threatening.position.z:.2f})")
-                logger.info(f"  目标距离: {target_distance:.2f}m")
+                logger.info("🎯 单目标模式 - 两阶段震动（从CSV读取）")
+                logger.info(f"  最具威胁目标: ID={threat_id}, Type={threat_type}")
+                logger.info(f"  目标位置: ({threat_x:.2f}, {threat_y:.2f}, {threat_z:.2f})")
+                logger.info(f"  目标距离: {threat_distance:.2f}m")
                 logger.info(f"  方向角度: {direction_angle:.2f}°")
                 logger.info(f"  选择马达: #{motor_id} - {direction_desc}")
                 logger.info(f"  震动强度: {intensity}")
@@ -229,7 +243,6 @@ def main():
                 logger.info("─" * 60)
                 
                 # 第一阶段：震动目标类别
-                import time
                 logger.info(f"▶ 第一阶段：震动目标类别 - 模式{type_mode}")
                 success1 = serial_handler.send_vibration(motor_id, intensity, duration, type_mode)
                 if not success1:

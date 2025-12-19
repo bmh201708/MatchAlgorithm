@@ -88,7 +88,7 @@ class CSVLogger:
         self,
         round_number: str,
         most_threatening_target: Optional[Target],
-        direction_threats: List[float]
+        direction_threats  # 可以是字典或列表
     ):
         """
         记录每轮的数据到CSV
@@ -96,7 +96,7 @@ class CSVLogger:
         Args:
             round_number: 轮次编号（如 "1-1"）
             most_threatening_target: 最具威胁的目标对象，如果没有则为None
-            direction_threats: 8个方向的威胁值列表 [北, 东北, 东, 东南, 南, 西南, 西, 西北]
+            direction_threats: 8个方向的威胁值（字典{0-7: float}或列表）
         """
         if not self.csv_writer or not self.csv_file:
             logger.error("CSV logger is not initialized")
@@ -124,13 +124,21 @@ class CSVLogger:
                 threat_y = "N/A"
                 threat_z = "N/A"
             
+            # 处理direction_threats（可以是字典或列表）
+            if isinstance(direction_threats, dict):
+                # 如果是字典，按方向ID（0-7）排序提取值
+                direction_threats_list = [direction_threats.get(i, 0.0) for i in range(8)]
+            else:
+                # 如果是列表，直接使用
+                direction_threats_list = list(direction_threats)
+            
             # 确保有8个方向的威胁值
-            if len(direction_threats) != 8:
-                logger.warning(f"Expected 8 direction threats, got {len(direction_threats)}")
-                direction_threats = direction_threats + [0.0] * (8 - len(direction_threats))
+            if len(direction_threats_list) < 8:
+                logger.warning(f"Expected 8 direction threats, got {len(direction_threats_list)}")
+                direction_threats_list = direction_threats_list + [0.0] * (8 - len(direction_threats_list))
             
             # 四舍五入威胁值到3位小数
-            direction_threats_rounded = [round(t, 3) for t in direction_threats[:8]]
+            direction_threats_rounded = [round(t, 3) for t in direction_threats_list[:8]]
             
             # 写入数据行
             row = [
@@ -153,6 +161,87 @@ class CSVLogger:
         except Exception as e:
             logger.error(f"Failed to write to CSV file: {e}")
             # 不抛出异常，避免中断主程序
+    
+    def check_round_exists(self, round_number: str) -> bool:
+        """
+        检查CSV文件中是否已存在该round的记录
+        
+        Args:
+            round_number: 轮次编号（如 "1-1"）
+        
+        Returns:
+            如果round已存在返回True，否则返回False
+        """
+        if not self.file_path or not os.path.exists(self.file_path):
+            return False
+        
+        try:
+            with open(self.file_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row.get('round') == round_number:
+                        return True
+            return False
+        except Exception as e:
+            logger.error(f"Error checking round existence: {e}")
+            return False
+    
+    def read_round_data(self, round_number: str) -> Optional[dict]:
+        """
+        从CSV读取指定round的数据
+        
+        Args:
+            round_number: 轮次编号（如 "1-1"）
+        
+        Returns:
+            包含该round数据的字典，如果round不存在则返回None
+            字典包含：threat_enemy_id, threat_enemy_type, threat_enemy_distance,
+                    threat_enemy_angle, threat_enemy_x, threat_enemy_y, threat_enemy_z,
+                    direction_threats (list of 8 floats)
+        """
+        if not self.file_path or not os.path.exists(self.file_path):
+            logger.warning(f"CSV file does not exist: {self.file_path}")
+            return None
+        
+        try:
+            with open(self.file_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row.get('round') == round_number:
+                        # 提取8个方向的威胁值
+                        direction_threats = [
+                            float(row.get('north_threat', 0.0)),
+                            float(row.get('northeast_threat', 0.0)),
+                            float(row.get('east_threat', 0.0)),
+                            float(row.get('southeast_threat', 0.0)),
+                            float(row.get('south_threat', 0.0)),
+                            float(row.get('southwest_threat', 0.0)),
+                            float(row.get('west_threat', 0.0)),
+                            float(row.get('northwest_threat', 0.0))
+                        ]
+                        
+                        # 构建返回数据
+                        data = {
+                            'round': round_number,
+                            'threat_enemy_id': row.get('threat_enemy_id'),
+                            'threat_enemy_type': row.get('threat_enemy_type'),
+                            'threat_enemy_distance': row.get('threat_enemy_distance'),
+                            'threat_enemy_angle': row.get('threat_enemy_angle'),
+                            'threat_enemy_x': row.get('threat_enemy_x'),
+                            'threat_enemy_y': row.get('threat_enemy_y'),
+                            'threat_enemy_z': row.get('threat_enemy_z'),
+                            'direction_threats': direction_threats
+                        }
+                        
+                        logger.debug(f"CSV: Read data for round {round_number}")
+                        return data
+            
+            logger.warning(f"Round {round_number} not found in CSV")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error reading round data: {e}")
+            return None
     
     def close(self):
         """关闭CSV文件"""
