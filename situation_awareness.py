@@ -219,7 +219,7 @@ def calculate_all_directions_threat(
 
 def normalize_threat_to_intensity(
     threat_scores: Dict[int, float],
-    min_intensity: int = 0,
+    min_intensity: int = 80,
     max_intensity: int = 255,
     threshold: float = 0.01
 ) -> Dict[int, int]:
@@ -228,12 +228,17 @@ def normalize_threat_to_intensity(
     
     Args:
         threat_scores: 各方向的威胁度分数字典
-        min_intensity: 最小震动强度，默认0
+        min_intensity: 最小可感知震动强度，默认80（低于此值几乎感觉不到）
         max_intensity: 最大震动强度，默认255
         threshold: 威胁度阈值，低于此值不震动
     
     Returns:
-        字典，键为方向ID（0-7），值为震动强度（0-255）
+        字典，键为方向ID（0-7），值为震动强度（0或min_intensity-max_intensity）
+    
+    说明：
+        - 威胁度 < threshold：不震动（intensity = 0）
+        - 威胁度 >= threshold：映射到 [min_intensity, max_intensity] 范围
+        - 这样确保所有有效震动都能被用户感知到
     """
     if not threat_scores:
         return {i: 0 for i in range(8)}
@@ -250,9 +255,11 @@ def normalize_threat_to_intensity(
         threat = threat_scores.get(direction_id, 0.0)
         
         if threat < threshold:
+            # 威胁度太低，不震动
             intensities[direction_id] = 0
         else:
             # 归一化到0-1范围，然后映射到min_intensity-max_intensity
+            # 确保所有有效震动都在可感知范围内
             normalized = threat / max_threat
             intensity = int(min_intensity + normalized * (max_intensity - min_intensity))
             intensities[direction_id] = intensity

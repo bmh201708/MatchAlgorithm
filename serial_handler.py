@@ -183,12 +183,12 @@ class SerialHandler:
         """检查串口是否已连接"""
         return self.serial_connection is not None and self.serial_connection.is_open
 
-    def hardware_test(self, num_vibrators: int = 8, test_duration: float = 1.0, pause_duration: float = 1.0) -> bool:
+    def hardware_test(self, num_vibrators: int = 16, test_duration: float = 1.0, pause_duration: float = 1.0) -> bool:
         """
         硬件测试：依次测试所有振动器的所有模式
         
         Args:
-            num_vibrators: 振动器数量，默认8个（编号0-7）
+            num_vibrators: 振动器数量，默认16个（编号0-15）
             test_duration: 每种模式的测试时长（秒），默认1秒
             pause_duration: 每次测试之间的间隔时长（秒），默认1秒
         
@@ -243,7 +243,7 @@ class SerialHandler:
             
             logger.info("\n" + "=" * 60)
             logger.info("✅ Hardware test completed successfully!")
-            logger.info(f"   Total tests: {num_vibrators * 4} (8 vibrators × 4 modes)")
+            logger.info(f"   Total tests: {num_vibrators * 4} ({num_vibrators} vibrators × 4 modes)")
             logger.info("=" * 60)
             return True
             

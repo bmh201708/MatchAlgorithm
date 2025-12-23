@@ -62,6 +62,6 @@ class GameData:
             round=data['round'],
             playerPosition=player_pos,
             targets=targets,
-            situationAwareness=situation_awareness
+            situationAwareness=data.get('situationAwareness', False)
         )
 

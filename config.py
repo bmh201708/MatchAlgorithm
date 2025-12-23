@@ -66,8 +66,8 @@ SERIAL_PORT = "COM7"
 # 波特率
 SERIAL_BAUDRATE = 9600
 
-# 震动器数量
-NUM_VIBRATORS = 8
+# 震动器数量（硬件测试时测试0~NUM_VIBRATORS-1）
+NUM_VIBRATORS = 16  # 测试震动片 0-15
 
 
 # ============================================================================
@@ -110,6 +110,24 @@ VIBRATION_DURATION = 3.0
 # Soldier: 模式1 (超快脉冲)
 VIBRATION_MODE_DRONE = 0
 VIBRATION_MODE_SOLDIER = 1
+
+# 单目标模式距离分级震动配置
+DISTANCE_1 = 10.0  # 第一个距离阈值（米）
+DISTANCE_2 = 20.0  # 第二个距离阈值（米）
+
+# 两次震动之间的暂停时间（秒）
+PAUSE_BETWEEN_VIBRATIONS = 3.0
+
+# 态势感知模式震动强度配置
+# 最小可感知震动强度（低于此值几乎感觉不到）
+# 根据实际硬件调整，推荐值：60-100
+MIN_PERCEPTIBLE_INTENSITY = 120
+
+# 最大震动强度
+MAX_VIBRATION_INTENSITY = 255
+
+# 威胁度阈值（低于此值不震动）
+THREAT_THRESHOLD = 0.01
 
 
 # ============================================================================

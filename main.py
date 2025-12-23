@@ -3,6 +3,7 @@ import logging
 import signal
 import sys
 import os
+import time
 from dotenv import load_dotenv
 
 # 加载环境变量
@@ -25,7 +26,13 @@ from config import (
     ENABLE_IFS_ASSESSMENT,
     ENABLE_GPT_ASSESSMENT,
     ENABLE_TERRAIN_ANALYSIS,
-    THREAT_ASSESSMENT_STRATEGY
+    THREAT_ASSESSMENT_STRATEGY,
+    MIN_PERCEPTIBLE_INTENSITY,
+    MAX_VIBRATION_INTENSITY,
+    THREAT_THRESHOLD,
+    DISTANCE_1,
+    DISTANCE_2,
+    PAUSE_BETWEEN_VIBRATIONS
 )
 
 from threat_analyzer import find_most_threatening_target
@@ -49,6 +56,27 @@ logger = logging.getLogger(__name__)
 
 # 全局变量，用于优雅退出
 running = True
+
+
+def get_distance_vibration_mode(distance: float) -> int:
+    """
+    根据距离返回震动模式
+    
+    Args:
+        distance: 敌人与玩家的距离（米）
+    
+    Returns:
+        震动模式编号：
+        - 0: 持续震动 (distance < DISTANCE_1, 最近)
+        - 2: 三连击 (DISTANCE_1 <= distance < DISTANCE_2, 中等)
+        - 3: 波浪式 (distance >= DISTANCE_2, 最远)
+    """
+    if distance < DISTANCE_1:
+        return 0  # 模式0: 持续震动 (最近)
+    elif distance < DISTANCE_2:
+        return 2  # 模式2: 三连击 (中等)
+    else:
+        return 3  # 模式3: 波浪式 (最远)
 
 
 def signal_handler(sig, frame):
@@ -170,49 +198,93 @@ def main():
                     )
                     logger.info(f"✓ Round {game_data.round} data saved to CSV")
             else:
-                logger.info(f"📋 Round {game_data.round} already exists in CSV, skipping calculation")
+                logger.info(f"📋 Round {game_data.round} already exists in CSV, skipping calculation and vibration")
+                continue  # 跳过已处理的 round
             
-            # ========== 步骤4：从CSV读取数据 ==========
-            round_data = csv_logger.read_round_data(game_data.round) if csv_logger else None
+            # ========== 检查是否为态势感知模式 ==========
+            if game_data.situationAwareness:
+                # 态势感知模式：同时震动所有方向
+                logger.info("🌐 态势感知模式已激活")
+                
+                # 将威胁度映射到震动强度
+                intensities_dict = normalize_threat_to_intensity(
+                    direction_threats,
+                    min_intensity=MIN_PERCEPTIBLE_INTENSITY,
+                    max_intensity=MAX_VIBRATION_INTENSITY,
+                    threshold=THREAT_THRESHOLD
+                )
+                
+                # 转换为列表（按方向ID 0-7 排序）
+                intensities_list = [intensities_dict.get(i, 0) for i in range(8)]
+                
+                # 发送多马达震动信号
+                success = serial_handler.send_multi_vibration(
+                    intensities=intensities_list,
+                    duration=VIBRATION_DURATION,
+                    mode=0  # 态势感知使用持续震动模式
+                )
+                
+                if not success:
+                    logger.error("Failed to send situation awareness vibration")
             
-            if not round_data:
-                logger.error(f"Failed to read round {game_data.round} data from CSV, skipping vibration")
-                continue
-            
-            # 计算敌人方向对应的马达编号
-            motor_id, direction_angle, direction_desc = calculate_motor_for_target(
-                game_data.playerPosition,
-                most_threatening.position
-            )
-            
-            # 根据敌人类型选择震动模式
-            # Drone: 模式0 (持续震动)
-            # Soldier: 模式1 (超快脉冲)
-            is_drone = most_threatening.type.lower() == "drone"
-            vibration_mode = VIBRATION_MODE_DRONE if is_drone else VIBRATION_MODE_SOLDIER
-            mode_name = "持续震动" if vibration_mode == VIBRATION_MODE_DRONE else "超快脉冲"
-            
-            # 使用配置的震动参数
-            intensity = VIBRATION_INTENSITY
-            duration = VIBRATION_DURATION
-            
-            # 打印方向分析结果
-            logger.info("─" * 60)
-            logger.info("🎯 Threat Direction Analysis")
-            logger.info(f"  Most threatening target: ID={most_threatening.id}, Type={most_threatening.type}")
-            logger.info(f"  Target position: ({most_threatening.position.x:.2f}, {most_threatening.position.y:.2f}, {most_threatening.position.z:.2f})")
-            logger.info(f"  Direction angle: {direction_angle:.2f}°")
-            logger.info(f"  Selected motor: #{motor_id} - {direction_desc}")
-            logger.info(f"  Vibration intensity: {intensity} (HIGH)")
-            logger.info(f"  Vibration mode: {vibration_mode} ({mode_name})")
-            logger.info(f"  Duration: {duration}s")
-            logger.info("─" * 60)
-            
-            # 发送震动信号
-            success = serial_handler.send_vibration(motor_id, intensity, duration, vibration_mode)
-            
-            if not success:
-                logger.error("Failed to send vibration signal")
+            else:
+                # 单目标模式：双震动（距离 + 类型）
+                logger.info("🎯 单目标模式 - 双震动")
+                
+                # 计算敌人方向对应的马达编号
+                motor_id, direction_angle, direction_desc = calculate_motor_for_target(
+                    game_data.playerPosition,
+                    most_threatening.position
+                )
+                
+                # ===== 第一次震动：根据距离 =====
+                distance = most_threatening.distance
+                distance_mode = get_distance_vibration_mode(distance)
+                distance_mode_name = ["持续震动", "超快脉冲", "三连击", "波浪式"][distance_mode]
+                
+                logger.info("=" * 60)
+                logger.info("🎯 第一次震动 - 距离反馈")
+                logger.info(f"  Most threatening target: ID={most_threatening.id}, Type={most_threatening.type}")
+                logger.info(f"  Target position: ({most_threatening.position.x:.2f}, {most_threatening.position.y:.2f}, {most_threatening.position.z:.2f})")
+                logger.info(f"  Direction angle: {direction_angle:.2f}°")
+                logger.info(f"  Selected motor: #{motor_id} - {direction_desc}")
+                logger.info("─" * 60)
+                logger.info(f"  距离: {distance:.2f}m")
+                logger.info(f"  震动强度: {VIBRATION_INTENSITY}")
+                logger.info(f"  震动模式: {distance_mode} ({distance_mode_name})")
+                logger.info(f"  持续时间: {VIBRATION_DURATION}s")
+                logger.info("=" * 60)
+                
+                success = serial_handler.send_vibration(
+                    motor_id, VIBRATION_INTENSITY, VIBRATION_DURATION, distance_mode
+                )
+                
+                if not success:
+                    logger.error("Failed to send first vibration (distance)")
+                
+                # ===== 暂停 3 秒 =====
+                logger.info(f"⏸  暂停 {PAUSE_BETWEEN_VIBRATIONS} 秒...")
+                time.sleep(PAUSE_BETWEEN_VIBRATIONS)
+                
+                # ===== 第二次震动：根据敌人类型 =====
+                is_drone = most_threatening.type.lower() == "drone"
+                type_mode = VIBRATION_MODE_DRONE if is_drone else VIBRATION_MODE_SOLDIER
+                type_mode_name = "持续震动" if is_drone else "超快脉冲"
+                
+                logger.info("=" * 60)
+                logger.info("🎯 第二次震动 - 敌人类型反馈")
+                logger.info(f"  敌人类型: {most_threatening.type}")
+                logger.info(f"  震动强度: {VIBRATION_INTENSITY}")
+                logger.info(f"  震动模式: {type_mode} ({type_mode_name})")
+                logger.info(f"  持续时间: {VIBRATION_DURATION}s")
+                logger.info("=" * 60)
+                
+                success = serial_handler.send_vibration(
+                    motor_id, VIBRATION_INTENSITY, VIBRATION_DURATION, type_mode
+                )
+                
+                if not success:
+                    logger.error("Failed to send second vibration (enemy type)")
     
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received")
