@@ -101,7 +101,7 @@ namespace BattlefieldDataReader
         public double Direction { get; set; }  // 0-360度
         
         // 辅助属性
-        public bool IsTank => Type == "tank";
+        public bool IsDrone => Type == "tank";
         public bool IsSoldier => Type == "soldier";
     }
     
@@ -136,7 +136,7 @@ namespace BattlefieldDataReader
                     Console.WriteLine($"类型: {image.Type}");
                     Console.WriteLine($"敌人总数: {image.EnemyCount}");
                     
-                    // 统计士兵和坦克数量
+                    // 统计士兵和无人机数量
                     int soldierCount = 0;
                     int tankCount = 0;
                     
@@ -144,11 +144,11 @@ namespace BattlefieldDataReader
                     {
                         if (enemy.IsSoldier)
                             soldierCount++;
-                        else if (enemy.IsTank)
+                        else if (enemy.IsDrone)
                             tankCount++;
                     }
                     
-                    Console.WriteLine($"士兵: {soldierCount}, 坦克: {tankCount}");
+                    Console.WriteLine($"士兵: {soldierCount}, 无人机: {tankCount}");
                     Console.WriteLine();
                 }
                 
@@ -161,7 +161,7 @@ namespace BattlefieldDataReader
                 {
                     var enemy = firstImage.Enemies[i];
                     Console.WriteLine($"敌人 {i + 1}:");
-                    Console.WriteLine($"  类型: {(enemy.IsTank ? "坦克" : "士兵")}");
+                    Console.WriteLine($"  类型: {(enemy.IsDrone ? "无人机" : "士兵")}");
                     Console.WriteLine($"  坐标: ({enemy.X:F2}, {enemy.Y:F2})米");
                     Console.WriteLine($"  速度: {enemy.Speed:F2}米/秒");
                     Console.WriteLine($"  方向: {enemy.Direction:F2}度");
@@ -172,14 +172,14 @@ namespace BattlefieldDataReader
                 var type3Images = battlefieldData.Images.FindAll(img => img.Type == "Type3_Fast");
                 Console.WriteLine($"找到 {type3Images.Count} 张类型3图片");
                 
-                // 示例：查找所有坦克
-                Console.WriteLine("\n=== 示例：统计所有坦克 ===");
+                // 示例：查找所有无人机
+                Console.WriteLine("\n=== 示例：统计所有无人机 ===");
                 int totalTanks = 0;
                 foreach (var image in battlefieldData.Images)
                 {
-                    totalTanks += image.Enemies.FindAll(e => e.IsTank).Count;
+                    totalTanks += image.Enemies.FindAll(e => e.IsDrone).Count;
                 }
-                Console.WriteLine($"所有图片中共有 {totalTanks} 个坦克");
+                Console.WriteLine($"所有图片中共有 {totalTanks} 个无人机");
                 
             }
             catch (FileNotFoundException)
