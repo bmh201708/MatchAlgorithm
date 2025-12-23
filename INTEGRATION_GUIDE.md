@@ -156,7 +156,7 @@ python test_integration.py
       "id": 1,
       "angle": 45.23,
       "distance": 12.50,
-      "type": "Tank",
+      "type": "Drone",
       "position": {
         "x": 10.5,
         "y": 0.0,
@@ -203,7 +203,7 @@ python test_integration.py
 | `targets[].id` | int | ✅ | 敌人唯一ID |
 | `targets[].angle` | float | ✅ | 相对玩家的角度（度） |
 | `targets[].distance` | float | ✅ | 距离玩家的距离（米） |
-| `targets[].type` | string | ✅ | 类型："Tank"、"Soldier"、"IFV" |
+| `targets[].type` | string | ✅ | 类型："Drone"、"Soldier"、"Drone" |
 | `targets[].position` | object | ✅ | 敌人3D坐标 |
 | `targets[].speed` | float | ⭕ | 移动速度（m/s），默认0.0 |
 | `targets[].direction` | float | ⭕ | 移动方向（0-360度），默认0.0 |
@@ -240,7 +240,7 @@ public class ThreatSystemSender : MonoBehaviour
                 id = e.id,
                 angle = CalculateAngle(playerPos, e.position),
                 distance = Vector3.Distance(playerPos, e.position),
-                type = e.type,  // "Tank", "Soldier", "IFV"
+                type = e.type,  // "Drone", "Soldier", "Drone"
                 position = new { x = e.position.x, y = e.position.y, z = e.position.z },
                 speed = e.velocity.magnitude,  // 【推荐】速度大小
                 direction = CalculateDirection(e.velocity)  // 【推荐】移动方向

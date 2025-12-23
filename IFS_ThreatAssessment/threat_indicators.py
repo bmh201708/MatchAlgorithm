@@ -38,9 +38,9 @@ class ThreatIndicators:
                 'high': 5.0,    # 士兵高速阈值
                 'medium': 2.0   # 士兵中速阈值
             },
-            'ifv': {
-                'high': 10.0,   # IFV高速阈值
-                'medium': 5.0   # IFV中速阈值
+            'drone': {
+                'high': 15.0,   # 无人机高速阈值
+                'medium': 8.0   # 无人机中速阈值
             }
         }
         
@@ -148,7 +148,7 @@ class ThreatIndicators:
         
         Args:
             speed: 移动速度（m/s）
-            enemy_type: 敌人类型 ('soldier' 或 'ifv')
+            enemy_type: 敌人类型 ('soldier' 或 'drone')
         
         Returns:
             {
@@ -313,11 +313,11 @@ class ThreatIndicators:
         指标4：目标类型评估
         
         论文方法：使用模糊评价语言转IFS
-        - IFV（步兵战车）：装甲厚、火力强 → 高威胁
-        - Soldier（士兵）：单兵作战 → 中等威胁
+        - Drone（敌军无人机）：灵活、侦察能力强 → 中等威胁
+        - Soldier（士兵）：单兵作战 → 低威胁
         
         Args:
-            enemy_type: 敌人类型 ('soldier', 'ifv', 'tank')
+            enemy_type: 敌人类型 ('soldier', 'drone')
         
         Returns:
             {
@@ -332,15 +332,10 @@ class ThreatIndicators:
         
         # 根据类型分配IFS值（基于战斗力和生存能力）
         type_mapping = {
-            'ifv': {
-                'ifs': IFS(0.90, 0.05),  # 步兵战车：高威胁
-                'name': '步兵战车',
-                'level': 'high'
-            },
-            'tank': {
-                'ifs': IFS(0.90, 0.05),  # 坦克：高威胁
-                'name': '坦克',
-                'level': 'high'
+            'drone': {
+                'ifs': IFS(0.60, 0.30),  # 无人机：中等威胁
+                'name': '敌军无人机',
+                'level': 'medium'
             },
             'soldier': {
                 'ifs': IFS(0.60, 0.30),  # 士兵：中等威胁
@@ -526,7 +521,7 @@ if __name__ == "__main__":
     
     # 测试2：速度指标
     print("\n【测试2】速度指标评估：")
-    for speed, etype in [(8, 'soldier'), (15, 'ifv'), (2, 'soldier')]:
+    for speed, etype in [(8, 'soldier'), (15, 'drone'), (2, 'soldier')]:
         result = indicators.evaluate_speed(speed, etype)
         print(f"{etype} {speed}m/s: {result['ifs']} - {result['speed_category']}")
     
@@ -542,7 +537,7 @@ if __name__ == "__main__":
     
     # 测试4：目标类型
     print("\n【测试4】目标类型评估：")
-    for etype in ['soldier', 'ifv']:
+    for etype in ['soldier', 'drone']:
         result = indicators.evaluate_target_type(etype)
         print(f"{etype}: {result['ifs']} - {result['type_name']}")
     

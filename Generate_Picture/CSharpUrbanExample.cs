@@ -206,7 +206,7 @@ namespace UrbanBattlefieldDataReader
         public int Id { get; set; }  // 敌人编号（从1开始）
         
         [JsonProperty("type")]
-        public string Type { get; set; }  // "soldier" 或 "ifv" (步兵战车)
+        public string Type { get; set; }  // "soldier" 或 "ifv" (无人机)
         
         [JsonProperty("x")]
         public double X { get; set; }
@@ -221,7 +221,7 @@ namespace UrbanBattlefieldDataReader
         public double Direction { get; set; }  // 0-360度
         
         // 辅助属性
-        public bool IsIFV => Type == "ifv";  // 步兵战车
+        public bool IsDrone => Type == "ifv";  // 无人机
         public bool IsSoldier => Type == "soldier";
         
         // 计算距离（到原点）
@@ -301,10 +301,10 @@ namespace UrbanBattlefieldDataReader
                         Console.WriteLine($"    战术: {image.TacticNameCN} ({image.TacticType})");
                         Console.WriteLine($"    敌人: {image.EnemyCount}个");
                         
-                        // 统计士兵和步兵战车数量
+                        // 统计士兵和无人机数量
                         int soldierCount = image.Enemies.Count(e => e.IsSoldier);
-                        int ifvCount = image.Enemies.Count(e => e.IsIFV);
-                        Console.WriteLine($"    士兵: {soldierCount}, 步兵战车: {ifvCount}");
+                        int ifvCount = image.Enemies.Count(e => e.IsDrone);
+                        Console.WriteLine($"    士兵: {soldierCount}, 无人机: {ifvCount}");
                     }
                 }
                 
@@ -319,7 +319,7 @@ namespace UrbanBattlefieldDataReader
                 {
                     var enemy = firstImage.Enemies[i];
                     Console.WriteLine($"\n敌人 #{enemy.Id}:");
-                    Console.WriteLine($"  类型: {(enemy.IsIFV ? "步兵战车" : "士兵")}");
+                    Console.WriteLine($"  类型: {(enemy.IsDrone ? "无人机" : "士兵")}");
                     Console.WriteLine($"  坐标: ({enemy.X:F2}, {enemy.Z:F2})米");
                     Console.WriteLine($"  速度: {enemy.Speed:F2}米/秒");
                     Console.WriteLine($"  方向: {enemy.Direction:F2}度");
@@ -384,11 +384,11 @@ namespace UrbanBattlefieldDataReader
                     .ToList();
                 Console.WriteLine($"距离超过20米的敌人: {distantEnemies.Count}个");
                 
-                // 统计所有图片中的步兵战车总数
+                // 统计所有图片中的无人机总数
                 int totalIFVs = battlefieldData.Images
                     .SelectMany(img => img.Enemies)
-                    .Count(e => e.IsIFV);
-                Console.WriteLine($"所有图片中共有步兵战车: {totalIFVs}个");
+                    .Count(e => e.IsDrone);
+                Console.WriteLine($"所有图片中共有无人机: {totalIFVs}个");
                 
                 // 找出移动最快的敌人
                 var fastestEnemy = battlefieldData.Images
@@ -397,7 +397,7 @@ namespace UrbanBattlefieldDataReader
                     .First();
                 Console.WriteLine($"\n移动最快的敌人:");
                 Console.WriteLine($"  图片: {fastestEnemy.Image.Filename}");
-                Console.WriteLine($"  类型: {(fastestEnemy.Enemy.IsIFV ? "步兵战车" : "士兵")}");
+                Console.WriteLine($"  类型: {(fastestEnemy.Enemy.IsDrone ? "无人机" : "士兵")}");
                 Console.WriteLine($"  速度: {fastestEnemy.Enemy.Speed:F2}米/秒");
                 
                 Console.WriteLine("\n=== 数据读取完成 ===");

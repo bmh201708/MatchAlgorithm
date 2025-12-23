@@ -53,8 +53,8 @@ class IFSThreatAnalyzerAdapter:
         Returns:
             enemy字典，包含IFS评估所需的字段
         """
-        # 类型映射: Tank -> ifv, Soldier -> soldier
-        enemy_type = 'ifv' if target.type.lower() == 'tank' else 'soldier'
+        # 类型映射: Drone -> drone, Soldier -> soldier
+        enemy_type = 'drone' if target.type.lower() == 'drone' else 'soldier'
         
         return {
             'id': target.id,
@@ -242,4 +242,6 @@ def log_ifs_details(target: Target, ifs_details: Dict):
         )
     
     logger.info("=" * 70)
+
+
 

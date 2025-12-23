@@ -271,7 +271,7 @@ Install-Package Newtonsoft.Json
 
 ### 敌人表示
 - **士兵（Soldier）**：橙红色圆圈 🟠
-- **步兵战车（IFV）**：紫色方块 🟣（不会出现在建筑物内部）
+- **无人机（Drone）**：紫色方块 🟣（不会出现在建筑物内部）
 - **移动方向**：黄色箭头指示
 - **引导线**：从敌人位置到标注框的黑色连线
 - **信息标注**：
@@ -284,7 +284,7 @@ Install-Package Newtonsoft.Json
 右上角包含完整的图例，包括：
 - Player（玩家）
 - Soldier（士兵）
-- IFV（步兵战车）
+- Drone（无人机）
 - Building（建筑）
 - Alley（巷道）
 - Cover（掩体）
@@ -390,10 +390,10 @@ foreach (var image in data.Images)
     Console.WriteLine($"战术: {image.TacticNameCN} ({image.TacticType})");
     Console.WriteLine($"敌人: {image.EnemyCount}个");
     
-    // 统计士兵和步兵战车
+    // 统计士兵和无人机
     int soldiers = image.Enemies.Count(e => e.IsSoldier);
-    int ifvs = image.Enemies.Count(e => e.IsIFV);
-    Console.WriteLine($"  士兵: {soldiers}, 步兵战车: {ifvs}");
+    int ifvs = image.Enemies.Count(e => e.IsDrone);
+    Console.WriteLine($"  士兵: {soldiers}, 无人机: {ifvs}");
 }
 
 // 战术分析
@@ -436,7 +436,7 @@ Install-Package Newtonsoft.Json
 
 ### 碰撞检测
 - 确保敌人不会生成在建筑物内部
-- 步兵战车需要额外的安全缓冲区（2米），不会紧贴建筑物
+- 无人机需要额外的安全缓冲区（2米），不会紧贴建筑物
 - 多次尝试机制（最多20次）找到有效位置
 - 保持战术意图的同时适应地形约束
 
@@ -455,7 +455,7 @@ Install-Package Newtonsoft.Json
 5. **文件覆盖**：每次运行会覆盖已存在的同名文件
 6. **敌人类型**：
    - **士兵**：可以在任何位置出现
-   - **步兵战车（IFV）**：不会出现在建筑物内部或紧贴建筑物的位置
+   - **无人机（Drone）**：不会出现在建筑物内部或紧贴建筑物的位置
 
 ## 应用场景
 

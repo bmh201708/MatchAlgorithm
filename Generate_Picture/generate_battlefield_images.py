@@ -23,7 +23,7 @@ COORD_RANGE = 30   # 坐标范围（米）
 CIRCLE_RADII = [10, 20]  # 同心圆半径（米）
 
 # 敌人类型
-ENEMY_TYPES = ['soldier', 'tank']
+ENEMY_TYPES = ['soldier', 'drone']
 
 # 速度范围（米/秒）
 SPEED_NORMAL = (1, 5)
@@ -37,7 +37,7 @@ def generate_enemy(coord_range, speed_range, enemy_type=None):
     Args:
         coord_range: 坐标范围（米）
         speed_range: 速度范围（最小值，最大值）
-        enemy_type: 敌人类型 'soldier' 或 'tank'，None则随机
+        enemy_type: 敌人类型 'soldier' 或 'drone'，None则随机
     
     Returns:
         dict: 包含敌人所有信息的字典
@@ -121,7 +121,7 @@ def draw_battlefield(enemies, filename, title):
             edge_color = 'darkred'
             size = 150
             label = '士兵'
-        else:  # tank
+        else:  # drone
             marker = 's'  # 方形
             color = 'purple'  # 紫色
             edge_color = 'darkviolet'
@@ -177,10 +177,10 @@ def draw_battlefield(enemies, filename, title):
     
     # 添加统计信息
     soldier_count = sum(1 for e in enemies if e['type'] == 'soldier')
-    tank_count = sum(1 for e in enemies if e['type'] == 'tank')
+    drone_count = sum(1 for e in enemies if e['type'] == 'drone')
     avg_speed = np.mean([e['speed'] for e in enemies])
     
-    stats_text = f'总敌人数: {len(enemies)}\n士兵: {soldier_count} | 坦克: {tank_count}\n平均速度: {avg_speed:.1f}m/s'
+    stats_text = f'总敌人数: {len(enemies)}\n士兵: {soldier_count} | 坦克: {drone_count}\n平均速度: {avg_speed:.1f}m/s'
     ax.text(0.02, 0.98, stats_text, transform=ax.transAxes,
            fontsize=10, va='top', ha='left',
            bbox=dict(boxstyle='round,pad=0.5', 

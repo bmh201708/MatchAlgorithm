@@ -17,7 +17,7 @@ class Target:
     id: int
     angle: float
     distance: float
-    type: str  # "Tank" or "Soldier"
+    type: str  # "Drone" or "Soldier"
     position: Position
     speed: float = 0.0          # 移动速度 (m/s)
     direction: float = 0.0      # 移动方向 (0-360度)

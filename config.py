@@ -106,9 +106,9 @@ VIBRATION_INTENSITY = 255
 VIBRATION_DURATION = 3.0
 
 # 震动模式映射
-# Tank/IFV: 模式0 (持续震动)
+# Drone: 模式0 (持续震动)
 # Soldier: 模式1 (超快脉冲)
-VIBRATION_MODE_TANK = 0
+VIBRATION_MODE_DRONE = 0
 VIBRATION_MODE_SOLDIER = 1
 
 
@@ -124,4 +124,6 @@ LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 
 # 日志时间格式
 LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+
+
 

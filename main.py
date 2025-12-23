@@ -20,7 +20,7 @@ from config import (
     UDP_PORT,
     VIBRATION_INTENSITY,
     VIBRATION_DURATION,
-    VIBRATION_MODE_TANK,
+    VIBRATION_MODE_DRONE,
     VIBRATION_MODE_SOLDIER,
     ENABLE_IFS_ASSESSMENT,
     ENABLE_GPT_ASSESSMENT,
@@ -138,11 +138,11 @@ def main():
             )
             
             # 根据敌人类型选择震动模式
-            # Tank/IFV: 模式0 (持续震动)
+            # Drone: 模式0 (持续震动)
             # Soldier: 模式1 (超快脉冲)
-            is_tank = most_threatening.type.lower() in ["tank", "ifv"]
-            vibration_mode = VIBRATION_MODE_TANK if is_tank else VIBRATION_MODE_SOLDIER
-            mode_name = "持续震动" if vibration_mode == VIBRATION_MODE_TANK else "超快脉冲"
+            is_drone = most_threatening.type.lower() == "drone"
+            vibration_mode = VIBRATION_MODE_DRONE if is_drone else VIBRATION_MODE_SOLDIER
+            mode_name = "持续震动" if vibration_mode == VIBRATION_MODE_DRONE else "超快脉冲"
             
             # 使用配置的震动参数
             intensity = VIBRATION_INTENSITY

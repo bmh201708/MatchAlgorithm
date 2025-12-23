@@ -160,7 +160,7 @@ class TacticsEngine:
         Args:
             x: 初始x坐标
             z: 初始z坐标
-            enemy_type: 敌人类型 ('soldier' 或 'ifv')
+            enemy_type: 敌人类型 ('soldier' 或 'drone')
             existing_enemies: 已有的敌人列表，用于碰撞检测
             max_attempts: 最大尝试次数
         
@@ -174,16 +174,16 @@ class TacticsEngine:
         # markersize 是点的大小，需要转换为地图坐标的实际半径
         # 假设markersize=14对应约2.5米，markersize=30对应约5米（进一步增大碰撞半径）
         soldier_radius = 2.5
-        ifv_radius = 5.0
+        drone_radius = 5.0
         
-        # 获取障碍物列表（用于IFV碰撞检测）
+        # 获取障碍物列表（用于Drone碰撞检测）
         obstacles = self.terrain.get_obstacles()
         
         for _ in range(max_attempts):
             # 检查是否在建筑物内
             if not self.terrain.is_inside_building(x, z):
-                # 对于步兵战车，需要更严格的检查（避免紧贴建筑物和障碍物）
-                if enemy_type == 'ifv':
+                # 对于无人机，需要更严格的检查（避免紧贴建筑物和障碍物）
+                if enemy_type == 'drone':
                     # 检查周围是否有足够空间（至少3米缓冲区）
                     safe = True
                     for dx in [-3, 0, 3]:
@@ -212,8 +212,8 @@ class TacticsEngine:
                             # 计算距离
                             distance = np.sqrt((x - closest_x)**2 + (z - closest_z)**2)
                             
-                            # IFV需要与障碍物保持至少3米距离
-                            if distance < ifv_radius:
+                            # Drone需要与障碍物保持至少3米距离
+                            if distance < drone_radius:
                                 safe = False
                                 break
                     
@@ -225,12 +225,12 @@ class TacticsEngine:
                         continue
                 
                 # 检查是否与已有敌人重叠
-                current_radius = ifv_radius if enemy_type == 'ifv' else soldier_radius
+                current_radius = drone_radius if enemy_type == 'drone' else soldier_radius
                 overlap = False
                 
                 for existing in existing_enemies:
                     ex, ez = existing['x'], existing['z']
-                    existing_radius = ifv_radius if existing['type'] == 'ifv' else soldier_radius
+                    existing_radius = drone_radius if existing['type'] == 'drone' else soldier_radius
                     
                     # 计算距离
                     distance = np.sqrt((x - ex)**2 + (z - ez)**2)
@@ -266,7 +266,7 @@ class TacticsEngine:
             z = distance * np.sin(angle_rad)
             
             # 随机选择敌人类型
-            enemy_type = random.choice(['soldier', 'ifv'])
+            enemy_type = random.choice(['soldier', 'drone'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
             # 移动方向指向中心
@@ -300,7 +300,7 @@ class TacticsEngine:
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
-            enemy_type = random.choice(['soldier', 'ifv'])
+            enemy_type = random.choice(['soldier', 'drone'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
             # 向右前方移动
@@ -328,7 +328,7 @@ class TacticsEngine:
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
-            enemy_type = random.choice(['soldier', 'ifv'])
+            enemy_type = random.choice(['soldier', 'drone'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
             # 向左前方移动
@@ -363,7 +363,7 @@ class TacticsEngine:
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
-            enemy_type = random.choice(['soldier', 'ifv'])
+            enemy_type = random.choice(['soldier', 'drone'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
             # 静止或慢速移动
@@ -394,7 +394,7 @@ class TacticsEngine:
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
-            enemy_type = random.choice(['soldier', 'ifv'])
+            enemy_type = random.choice(['soldier', 'drone'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
             # 移动方向背离中心
@@ -431,7 +431,7 @@ class TacticsEngine:
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
-            enemy_type = random.choice(['soldier', 'ifv'])
+            enemy_type = random.choice(['soldier', 'drone'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
             # 直指中心
@@ -465,7 +465,7 @@ class TacticsEngine:
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
-            enemy_type = random.choice(['soldier', 'ifv'])
+            enemy_type = random.choice(['soldier', 'drone'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
             # 斜向包抄
@@ -495,7 +495,7 @@ class TacticsEngine:
         obstacles = self.terrain.get_obstacles()
         
         for i in range(num_enemies):
-            enemy_type = random.choice(['soldier', 'ifv'])
+            enemy_type = random.choice(['soldier', 'drone'])
             
             if obstacles and random.random() < 0.6:
                 # 60%概率在障碍物附近
@@ -537,7 +537,7 @@ class TacticsEngine:
             x = random.uniform(-COORD_RANGE + 5, COORD_RANGE - 5)
             z = random.uniform(-COORD_RANGE + 5, COORD_RANGE - 5)
             
-            enemy_type = random.choice(['soldier', 'ifv'])
+            enemy_type = random.choice(['soldier', 'drone'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
             # 随机移动方向
@@ -571,7 +571,7 @@ class TacticsEngine:
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
-            enemy_type = random.choice(['soldier', 'ifv'])
+            enemy_type = random.choice(['soldier', 'drone'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
             # 向前追击
@@ -602,7 +602,7 @@ class TacticsEngine:
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
-            enemy_type = random.choice(['soldier', 'ifv'])
+            enemy_type = random.choice(['soldier', 'drone'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
             # 辐射状移动
@@ -671,8 +671,8 @@ class BattlefieldRenderer:
                    markersize=10, label='Player', markeredgecolor='darkred', markeredgewidth=1.5),
             Line2D([0], [0], marker='o', color='w', markerfacecolor='orangered', 
                    markersize=9, label='Soldier (ID)', markeredgecolor='darkred', markeredgewidth=1.5),
-            Line2D([0], [0], marker='s', color='w', markerfacecolor='purple', 
-                   markersize=11, label='IFV (ID)', markeredgecolor='darkviolet', markeredgewidth=1.5),
+            Line2D([0], [0], marker='D', color='w', markerfacecolor='deepskyblue', 
+                   markersize=11, label='Drone (ID)', markeredgecolor='navy', markeredgewidth=1.5),
             Rectangle((0, 0), 1, 1, facecolor='dimgray', edgecolor='black', 
                      alpha=0.7, linewidth=1.5, label='Building'),
             Rectangle((0, 0), 1, 1, facecolor='lightgray', alpha=0.5, 
@@ -784,15 +784,15 @@ class BattlefieldRenderer:
             speed = enemy['speed']
             direction = enemy['direction']
             
-            # 绘制敌人图标（IFV显著增大）
+            # 绘制敌人图标（Drone显著增大）
             if enemy_type == 'soldier':
                 # 士兵：橙红色圆圈
                 ax.plot(x, z, 'o', color='orangered', markersize=14, 
                        markeredgecolor='darkred', markeredgewidth=2)
-            else:  # ifv (步兵战车)
-                # IFV：紫色方块（30像素）
-                ax.plot(x, z, 's', color='purple', markersize=30,
-                       markeredgecolor='darkviolet', markeredgewidth=2.5)
+            else:  # drone (无人机)
+                # Drone：深天蓝色菱形（25像素）
+                ax.plot(x, z, 'D', color='deepskyblue', markersize=25,
+                       markeredgecolor='navy', markeredgewidth=2.5)
             
             # 在图标内部标注编号（白色文字）
             enemy_number = i + 1
@@ -858,8 +858,8 @@ def generate_all_images(terrain_file: str, output_dir: str):
     
     image_types = [
         ('type1', 3, SPEED_NORMAL, 'Type1_Sparse'),
-        ('type2', 30, SPEED_NORMAL, 'Type2_Dense'),
-        ('type3', 30, SPEED_FAST, 'Type3_Fast')
+        ('type2', 15, SPEED_NORMAL, 'Type2_Dense'),
+        ('type3', 15, SPEED_FAST, 'Type3_Fast')
     ]
     
     for type_name, num_enemies, speed_range, type_label in image_types:

@@ -84,8 +84,8 @@ def calculate_threat_score_simple(target: Target, player_pos) -> float:
     # 将角度转换为绝对值，正前方（0度）威胁最大
     angle_factor = 1.0 / (abs(target.angle) + 1)
     
-    # 类型因子（Tank=2.0, Soldier=1.0）
-    type_factor = 2.0 if target.type == "Tank" else 1.0
+    # 类型因子（Drone=1.2, Soldier=1.0）
+    type_factor = 1.2 if target.type == "Drone" else 1.0
     
     # 综合威胁度
     threat_score = distance_factor * angle_factor * type_factor
@@ -142,7 +142,7 @@ def find_most_threatening_target_with_gpt(game_data: GameData) -> Optional[Targe
 考虑因素：
 1. 距离：越近越危险
 2. 角度：越接近正前方（0度）越危险
-3. 类型：Tank（坦克）比Soldier（士兵）更危险
+3. 类型：Drone（无人机）比Soldier（士兵）更危险
 
 请回复最有威胁的敌人ID（只回复数字ID，不要其他内容）。"""
 
