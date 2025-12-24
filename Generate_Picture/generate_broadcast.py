@@ -24,15 +24,19 @@ def calculate_clock_position(x, z):
 
 def get_movement_description(speed, direction, x, z):
     """根据速度和方向描述动作"""
-    # 计算是否指向中心
-    to_center_angle = math.degrees(math.atan2(-z, -x))
+    # 计算从敌人指向中心(用户)的角度
+    # 坐标系：z轴为0度(北)，x轴为90度(东)，顺时针为正
+    to_center_angle = math.degrees(math.atan2(-x, -z))
     if to_center_angle < 0:
         to_center_angle += 360
     
+    # 计算敌人移动方向与指向中心方向的夹角
     angle_diff = abs(direction - to_center_angle)
     if angle_diff > 180:
         angle_diff = 360 - angle_diff
     
+    # 夹角<45度：朝向用户（逼近）
+    # 夹角>135度：背离用户（远离）
     is_approaching = angle_diff < 45
     is_retreating = angle_diff > 135
     
@@ -54,23 +58,24 @@ def get_movement_description(speed, direction, x, z):
     elif is_retreating:
         return f"{speed_desc}撤离"
     else:
+        # 坐标系：0度=北(+z), 90度=东(+x), 180度=南(-z), 270度=西(-x)
         dir_angle = direction % 360
         if 337.5 <= dir_angle or dir_angle < 22.5:
-            dir_str = "向东"
+            dir_str = "向北"
         elif 22.5 <= dir_angle < 67.5:
             dir_str = "向东北"
         elif 67.5 <= dir_angle < 112.5:
-            dir_str = "向北"
+            dir_str = "向东"
         elif 112.5 <= dir_angle < 157.5:
-            dir_str = "向西北"
+            dir_str = "向东南"
         elif 157.5 <= dir_angle < 202.5:
-            dir_str = "向西"
+            dir_str = "向南"
         elif 202.5 <= dir_angle < 247.5:
             dir_str = "向西南"
         elif 247.5 <= dir_angle < 292.5:
-            dir_str = "向南"
+            dir_str = "向西"
         else:
-            dir_str = "向东南"
+            dir_str = "向西北"
         return f"{speed_desc}{dir_str}机动"
 
 def get_tactic_description(tactic):
@@ -145,15 +150,33 @@ def generate_template2_broadcast(data):
     # 核心威胁（最近的2-3个）
     core_threats = enemies_sorted[:min(3, total)]
     
-    # 计算主力方位（大多数敌人的平均方位）
-    avg_x = sum(e['x'] for e in enemies) / total
-    avg_z = sum(e['z'] for e in enemies) / total
-    main_clock = calculate_clock_position(avg_x, avg_z)
+    # 计算主力方位（找敌人最密集的时钟扇区）
+    clock_distribution = {}
+    for e in enemies:
+        clock = calculate_clock_position(e['x'], e['z'])
+        if clock not in clock_distribution:
+            clock_distribution[clock] = []
+        clock_distribution[clock].append(e)
     
-    # 判断整体动向
+    # 找到敌人数量最多的时钟方位（考虑相邻扇区）
+    max_density = 0
+    main_clock = 12
+    for hour in range(1, 13):
+        # 计算当前扇区及相邻扇区的总敌人数
+        prev_hour = 12 if hour == 1 else hour - 1
+        next_hour = 1 if hour == 12 else hour + 1
+        density = (len(clock_distribution.get(prev_hour, [])) + 
+                   len(clock_distribution.get(hour, [])) + 
+                   len(clock_distribution.get(next_hour, [])))
+        if density > max_density:
+            max_density = density
+            main_clock = hour
+    
+    # 判断整体动向（统计有多少敌人在逼近）
     approaching_count = 0
     for e in enemies:
-        to_center_angle = math.degrees(math.atan2(-e['z'], -e['x']))
+        # 计算从敌人指向中心的角度
+        to_center_angle = math.degrees(math.atan2(-e['x'], -e['z']))
         if to_center_angle < 0:
             to_center_angle += 360
         angle_diff = abs(e['direction'] - to_center_angle)
@@ -173,18 +196,58 @@ def generate_template2_broadcast(data):
     broadcast = f"{alert_level}！接触大批敌军，当前战场共发现{total}个目标。"
     broadcast += f"装备识别为{uavs}架无人机与{soldiers}名士兵，判定为{unit_type}，目前呈{tactic}。"
     
-    # 核心威胁
-    threat_ids = "、".join([f"{e['id']}号" for e in core_threats])
+    # 核心威胁（分别播报每个目标的方向和状态）
     threat_dist = int(core_threats[0]['distance'])
-    threat_clock = calculate_clock_position(core_threats[0]['x'], core_threats[0]['z'])
-    threat_desc = "突入核心圈" if threat_dist < 10 else "逼近警戒线"
     
-    broadcast += f"核心威胁位于{threat_clock}点钟方向，其中目标{threat_ids}已{threat_desc}，距离约{threat_dist}米；"
+    # 为每个核心威胁生成描述
+    threat_descriptions = []
+    for threat in core_threats:
+        threat_id = threat['id']
+        threat_clock = calculate_clock_position(threat['x'], threat['z'])
+        threat_distance = int(threat['distance'])
+        
+        # 判断是否正在逼近
+        to_center_angle = math.degrees(math.atan2(-threat['x'], -threat['z']))
+        if to_center_angle < 0:
+            to_center_angle += 360
+        angle_diff = abs(threat['direction'] - to_center_angle)
+        if angle_diff > 180:
+            angle_diff = 360 - angle_diff
+        
+        is_approaching = angle_diff < 45
+        is_retreating = angle_diff > 135
+        
+        if is_approaching:
+            status = "正逼近"
+        elif is_retreating:
+            status = "正撤离"
+        else:
+            status = "侧向机动"
+        
+        threat_descriptions.append(f"{threat_clock}点钟目标{threat_id}号{status}")
     
-    # 主力集群
-    min_main_dist = int(enemies_sorted[3]['distance']) if len(enemies_sorted) > 3 else threat_dist
-    max_main_dist = int(enemies_sorted[-1]['distance'])
-    broadcast += f"主力集群密集分布于{main_clock}点钟方向{min_main_dist}-{max_main_dist}米范围，正{main_action}。"
+    # 组合描述
+    threats_text = "、".join(threat_descriptions)
+    
+    if threat_dist < 10:
+        broadcast += f"核心威胁包括{threats_text}，最近已突入核心圈，距离约{threat_dist}米；"
+    else:
+        broadcast += f"核心威胁包括{threats_text}，最近距离约{threat_dist}米；"
+    
+    # 主力集群（只计算主力方位附近的敌人）
+    prev_hour = 12 if main_clock == 1 else main_clock - 1
+    next_hour = 1 if main_clock == 12 else main_clock + 1
+    main_enemies = (clock_distribution.get(prev_hour, []) + 
+                    clock_distribution.get(main_clock, []) + 
+                    clock_distribution.get(next_hour, []))
+    
+    if main_enemies:
+        main_distances = sorted([e['distance'] for e in main_enemies])
+        min_main_dist = int(main_distances[0])
+        max_main_dist = int(main_distances[-1])
+        broadcast += f"主力集群密集分布于{main_clock}点钟方向{min_main_dist}-{max_main_dist}米范围，正{main_action}。"
+    else:
+        broadcast += f"主力集群密集分布于{main_clock}点钟方向，正{main_action}。"
     
     return broadcast
 
