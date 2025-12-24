@@ -9,7 +9,7 @@ import os
 import json
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle, Circle, FancyArrow, Polygon
+from matplotlib.patches import Rectangle, Circle, FancyArrow, Polygon, Arc, FancyBboxPatch
 from matplotlib.lines import Line2D
 import random
 from datetime import datetime
@@ -160,7 +160,7 @@ class TacticsEngine:
         Args:
             x: 初始x坐标
             z: 初始z坐标
-            enemy_type: 敌人类型 ('soldier' 或 'drone')
+            enemy_type: 敌人类型 ('soldier' 或 'uav')
             existing_enemies: 已有的敌人列表，用于碰撞检测
             max_attempts: 最大尝试次数
         
@@ -183,7 +183,7 @@ class TacticsEngine:
             # 检查是否在建筑物内
             if not self.terrain.is_inside_building(x, z):
                 # 对于无人机，需要更严格的检查（避免紧贴建筑物和障碍物）
-                if enemy_type == 'drone':
+                if enemy_type == 'uav':
                     # 检查周围是否有足够空间（至少3米缓冲区）
                     safe = True
                     for dx in [-3, 0, 3]:
@@ -225,12 +225,12 @@ class TacticsEngine:
                         continue
                 
                 # 检查是否与已有敌人重叠
-                current_radius = drone_radius if enemy_type == 'drone' else soldier_radius
+                current_radius = drone_radius if enemy_type == 'uav' else soldier_radius
                 overlap = False
                 
                 for existing in existing_enemies:
                     ex, ez = existing['x'], existing['z']
-                    existing_radius = drone_radius if existing['type'] == 'drone' else soldier_radius
+                    existing_radius = drone_radius if existing['type'] == 'uav' else soldier_radius
                     
                     # 计算距离
                     distance = np.sqrt((x - ex)**2 + (z - ez)**2)
@@ -255,21 +255,23 @@ class TacticsEngine:
         return x, z  # 如果多次尝试失败，返回最后位置
     
     def _generate_encirclement(self, num_enemies: int, speed_range: Tuple[float, float]) -> List[Dict]:
-        """包围战术：敌人均匀分布在用户周围"""
+        """包围战术：敌人均匀分布在用户周围形成包围圈"""
         enemies = []
         for i in range(num_enemies):
-            angle = (360 / num_enemies) * i + random.uniform(-10, 10)
+            # 均匀角度分布，只有小幅随机偏移
+            angle = (360 / num_enemies) * i + random.uniform(-5, 5)
             angle_rad = np.radians(angle)
-            distance = random.uniform(12, 22)
+            # 集中在一个圆环上，距离变化小
+            distance = 17 + random.uniform(-2, 2)
             
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
             # 随机选择敌人类型
-            enemy_type = random.choice(['soldier', 'drone'])
+            enemy_type = random.choice(['soldier', 'uav'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
-            # 移动方向指向中心
+            # 移动方向精确指向中心
             direction = (angle + 180) % 360
             
             # 生成速度，士兵最大速度限制为10m/s
@@ -287,24 +289,26 @@ class TacticsEngine:
         return enemies
     
     def _generate_pincer(self, num_enemies: int, speed_range: Tuple[float, float]) -> List[Dict]:
-        """钳形攻势：左右两翼包抄"""
+        """钳形攻势：左右两翼集中包抄"""
         enemies = []
         half = num_enemies // 2
         
-        # 左翼
+        # 左翼 - 集中在左后方
         for i in range(half):
-            angle = random.uniform(135, 225)  # 左侧扇形
+            # 集中在150-210度区域（左后方）
+            angle = 180 + random.uniform(-25, 25)
             angle_rad = np.radians(angle)
-            distance = random.uniform(15, 25)
+            # 距离更集中
+            distance = 20 + random.uniform(-3, 3)
             
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
-            enemy_type = random.choice(['soldier', 'drone'])
+            enemy_type = random.choice(['soldier', 'uav'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
-            # 向右前方移动
-            direction = random.uniform(-30, 30)
+            # 向中心右前方移动
+            direction = random.uniform(0, 45)
             
             # 生成速度，士兵最大速度限制为10m/s
             speed = random.uniform(*speed_range)
@@ -319,20 +323,22 @@ class TacticsEngine:
                 'direction': direction
             })
         
-        # 右翼
+        # 右翼 - 集中在右后方
         for i in range(num_enemies - half):
-            angle = random.uniform(-45, 45)  # 右侧扇形
+            # 集中在-30到30度区域（右后方）
+            angle = 0 + random.uniform(-25, 25)
             angle_rad = np.radians(angle)
-            distance = random.uniform(15, 25)
+            # 距离更集中
+            distance = 20 + random.uniform(-3, 3)
             
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
-            enemy_type = random.choice(['soldier', 'drone'])
+            enemy_type = random.choice(['soldier', 'uav'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
-            # 向左前方移动
-            direction = random.uniform(150, 210)
+            # 向中心左前方移动
+            direction = random.uniform(135, 180)
             
             # 生成速度，士兵最大速度限制为10m/s
             speed = random.uniform(*speed_range)
@@ -350,24 +356,26 @@ class TacticsEngine:
         return enemies
     
     def _generate_ambush(self, num_enemies: int, speed_range: Tuple[float, float]) -> List[Dict]:
-        """伏击战术：敌人隐藏在建筑和障碍物后"""
+        """伏击战术：敌人集中隐藏在某个方向"""
         enemies = []
         # 集中在某个方向（随机选择）
         ambush_angle = random.choice([0, 90, 180, 270])
         
         for i in range(num_enemies):
-            angle = ambush_angle + random.uniform(-30, 30)
+            # 非常集中的角度分布（-20到+20度）
+            angle = ambush_angle + random.uniform(-20, 20)
             angle_rad = np.radians(angle)
-            distance = random.uniform(15, 25)
+            # 距离也比较集中
+            distance = 20 + random.uniform(-3, 3)
             
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
-            enemy_type = random.choice(['soldier', 'drone'])
+            enemy_type = random.choice(['soldier', 'uav'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
-            # 静止或慢速移动
-            direction = (angle + 180 + random.uniform(-20, 20)) % 360
+            # 静止或慢速移动，指向中心
+            direction = (angle + 180 + random.uniform(-15, 15)) % 360
             
             # 生成速度，士兵最大速度限制为10m/s
             speed = random.uniform(*speed_range) * 0.3  # 伏击时速度较慢
@@ -384,24 +392,26 @@ class TacticsEngine:
         return enemies
     
     def _generate_retreat(self, num_enemies: int, speed_range: Tuple[float, float]) -> List[Dict]:
-        """撤退战术：敌人向外逃离"""
+        """撤退战术：敌人向外逃离，距离较远"""
         enemies = []
         for i in range(num_enemies):
-            angle = (360 / num_enemies) * i + random.uniform(-15, 15)
+            # 均匀分散但距离较远
+            angle = (360 / num_enemies) * i + random.uniform(-10, 10)
             angle_rad = np.radians(angle)
-            distance = random.uniform(18, 28)
+            # 距离明显增大，表示正在撤退
+            distance = 25 + random.uniform(-2, 4)
             
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
-            enemy_type = random.choice(['soldier', 'drone'])
+            enemy_type = random.choice(['soldier', 'uav'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
             # 移动方向背离中心
             direction = angle % 360
             
             # 生成速度，士兵最大速度限制为10m/s
-            speed = random.uniform(*speed_range) * 1.2  # 撤退速度较快
+            speed = random.uniform(*speed_range) * 1.3  # 撤退速度更快
             if enemy_type == 'soldier':
                 speed = min(speed, 10.0)
             
@@ -415,23 +425,24 @@ class TacticsEngine:
         return enemies
     
     def _generate_frontal_assault(self, num_enemies: int, speed_range: Tuple[float, float]) -> List[Dict]:
-        """正面突击：集中在前方"""
+        """正面突击：集中在前方排成波次"""
         enemies = []
         # 正面方向（假设为0度，即+X方向）
         front_angle = 0
         
         for i in range(num_enemies):
-            angle = front_angle + random.uniform(-45, 45)
+            # 角度范围缩小，更集中在正面
+            angle = front_angle + random.uniform(-30, 30)
             angle_rad = np.radians(angle)
             
-            # 排成多波次
+            # 排成明显的波次（3波）
             wave = i % 3
-            distance = 15 + wave * 5 + random.uniform(-2, 2)
+            distance = 18 + wave * 4 + random.uniform(-1, 1)
             
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
-            enemy_type = random.choice(['soldier', 'drone'])
+            enemy_type = random.choice(['soldier', 'uav'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
             # 直指中心
@@ -452,27 +463,29 @@ class TacticsEngine:
         return enemies
     
     def _generate_flanking(self, num_enemies: int, speed_range: Tuple[float, float]) -> List[Dict]:
-        """侧翼包抄：从侧面包抄"""
+        """侧翼包抄：从侧面集中包抄"""
         enemies = []
         # 随机选择左侧或右侧
         flank_side = random.choice([-90, 90])
         
         for i in range(num_enemies):
-            angle = flank_side + random.uniform(-30, 30)
+            # 角度范围更集中
+            angle = flank_side + random.uniform(-20, 20)
             angle_rad = np.radians(angle)
-            distance = random.uniform(15, 25)
+            # 距离更集中
+            distance = 20 + random.uniform(-3, 3)
             
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
-            enemy_type = random.choice(['soldier', 'drone'])
+            enemy_type = random.choice(['soldier', 'uav'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
-            # 斜向包抄
+            # 斜向包抄，方向更一致
             if flank_side == -90:  # 左侧
-                direction = random.uniform(30, 90)
+                direction = random.uniform(40, 80)
             else:  # 右侧
-                direction = random.uniform(270, 330)
+                direction = random.uniform(280, 320)
             
             # 生成速度，士兵最大速度限制为10m/s
             speed = random.uniform(*speed_range)
@@ -489,24 +502,24 @@ class TacticsEngine:
         return enemies
     
     def _generate_defensive(self, num_enemies: int, speed_range: Tuple[float, float]) -> List[Dict]:
-        """防御阵型：依托掩体"""
+        """防御阵型：围绕障碍物形成防御圈"""
         enemies = []
         # 获取障碍物位置作为防御点
         obstacles = self.terrain.get_obstacles()
         
         for i in range(num_enemies):
-            enemy_type = random.choice(['soldier', 'drone'])
+            enemy_type = random.choice(['soldier', 'uav'])
             
-            if obstacles and random.random() < 0.6:
-                # 60%概率在障碍物附近
+            if obstacles and random.random() < 0.75:
+                # 75%概率紧密围绕障碍物
                 obstacle = random.choice(obstacles)
-                x = obstacle['x'] + random.uniform(-2, 2)
-                z = obstacle['z'] + random.uniform(-2, 2)
+                x = obstacle['x'] + random.uniform(-3, 3)
+                z = obstacle['z'] + random.uniform(-3, 3)
             else:
-                # 随机分布
-                angle = random.uniform(0, 360)
+                # 形成防御圆圈
+                angle = (360 / num_enemies) * i + random.uniform(-10, 10)
                 angle_rad = np.radians(angle)
-                distance = random.uniform(12, 20)
+                distance = 15 + random.uniform(-2, 2)
                 x = distance * np.cos(angle_rad)
                 z = distance * np.sin(angle_rad)
             
@@ -516,7 +529,7 @@ class TacticsEngine:
             direction = np.degrees(np.arctan2(-z, -x))
             
             # 生成速度，士兵最大速度限制为10m/s
-            speed = random.uniform(*speed_range) * 0.4  # 防御时速度很慢
+            speed = random.uniform(*speed_range) * 0.3  # 防御时速度更慢
             if enemy_type == 'soldier':
                 speed = min(speed, 10.0)
             
@@ -530,51 +543,72 @@ class TacticsEngine:
         return enemies
     
     def _generate_guerrilla(self, num_enemies: int, speed_range: Tuple[float, float]) -> List[Dict]:
-        """游击骚扰：分散不规则"""
+        """游击骚扰：形成小组分散在各处"""
         enemies = []
-        for i in range(num_enemies):
-            # 完全随机分布
-            x = random.uniform(-COORD_RANGE + 5, COORD_RANGE - 5)
-            z = random.uniform(-COORD_RANGE + 5, COORD_RANGE - 5)
+        # 计算小组数量（2-4个敌人一组）
+        group_size = 3
+        # 使用向上取整确保所有敌人都被分配
+        import math
+        num_groups = max(1, math.ceil(num_enemies / group_size))
+        
+        for g in range(num_groups):
+            # 每组选择一个随机中心点
+            center_x = random.uniform(-35, 35)
+            center_z = random.uniform(-35, 35)
             
-            enemy_type = random.choice(['soldier', 'drone'])
-            x, z = self._find_valid_position(x, z, enemy_type, enemies)
+            # 这个组的敌人数量
+            enemies_in_group = min(group_size, num_enemies - len(enemies))
             
-            # 随机移动方向
-            direction = random.uniform(0, 360)
-            
-            # 生成速度，士兵最大速度限制为10m/s
-            speed = random.uniform(*speed_range)
-            if enemy_type == 'soldier':
-                speed = min(speed, 10.0)
-            
-            enemies.append({
-                'type': enemy_type,
-                'x': x,
-                'z': z,
-                'speed': speed,
-                'direction': direction
-            })
+            for i in range(enemies_in_group):
+                # 围绕组中心点分布
+                angle = random.uniform(0, 360)
+                angle_rad = np.radians(angle)
+                distance = random.uniform(2, 6)
+                
+                x = center_x + distance * np.cos(angle_rad)
+                z = center_z + distance * np.sin(angle_rad)
+                
+                enemy_type = random.choice(['soldier', 'uav'])
+                x, z = self._find_valid_position(x, z, enemy_type, enemies)
+                
+                # 移动方向有一定随机性
+                direction = random.uniform(0, 360)
+                
+                # 生成速度，士兵最大速度限制为10m/s
+                speed = random.uniform(*speed_range)
+                if enemy_type == 'soldier':
+                    speed = min(speed, 10.0)
+                
+                enemies.append({
+                    'type': enemy_type,
+                    'x': x,
+                    'z': z,
+                    'speed': speed,
+                    'direction': direction
+                })
+        
         return enemies
     
     def _generate_pursuit(self, num_enemies: int, speed_range: Tuple[float, float]) -> List[Dict]:
-        """追击战术：从后方追赶"""
+        """追击战术：从后方集中追赶"""
         enemies = []
         # 后方（假设为180度，即-X方向）
         rear_angle = 180
         
         for i in range(num_enemies):
-            angle = rear_angle + random.uniform(-60, 60)
+            # 更集中在后方区域
+            angle = rear_angle + random.uniform(-35, 35)
             angle_rad = np.radians(angle)
-            distance = random.uniform(15, 25)
+            # 距离更集中
+            distance = 22 + random.uniform(-3, 3)
             
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
-            enemy_type = random.choice(['soldier', 'drone'])
+            enemy_type = random.choice(['soldier', 'uav'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
-            # 向前追击
+            # 向前追击，方向更一致
             direction = (angle + 180) % 360
             
             # 生成速度，士兵最大速度限制为10m/s
@@ -592,21 +626,24 @@ class TacticsEngine:
         return enemies
     
     def _generate_dispersed(self, num_enemies: int, speed_range: Tuple[float, float]) -> List[Dict]:
-        """分散机动：均匀分散"""
+        """分散机动：均匀分散在不同距离"""
         enemies = []
         for i in range(num_enemies):
-            angle = (360 / num_enemies) * i + random.uniform(-20, 20)
+            # 均匀角度分布
+            angle = (360 / num_enemies) * i + random.uniform(-10, 10)
             angle_rad = np.radians(angle)
-            distance = random.uniform(15, 25)
+            # 距离有层次变化
+            distance_layer = i % 3
+            distance = 15 + distance_layer * 4 + random.uniform(-2, 2)
             
             x = distance * np.cos(angle_rad)
             z = distance * np.sin(angle_rad)
             
-            enemy_type = random.choice(['soldier', 'drone'])
+            enemy_type = random.choice(['soldier', 'uav'])
             x, z = self._find_valid_position(x, z, enemy_type, enemies)
             
-            # 辐射状移动
-            direction = angle + random.uniform(-30, 30)
+            # 辐射状移动，方向较一致
+            direction = angle + random.uniform(-20, 20)
             
             # 生成速度，士兵最大速度限制为10m/s
             speed = random.uniform(*speed_range)
@@ -632,7 +669,7 @@ class BattlefieldRenderer:
         self.fig_size = (16, 16)
         self.dpi = 100
     
-    def render(self, enemies: List[Dict], title: str, filename: str):
+    def render(self, enemies: List[Dict], tactic: str, title: str, filename: str):
         """渲染完整的战场图"""
         fig, ax = plt.subplots(figsize=self.fig_size, dpi=self.dpi)
         
@@ -662,6 +699,9 @@ class BattlefieldRenderer:
         ax.plot(0, 0, marker='*', color='red', markersize=20, 
                markeredgecolor='darkred', markeredgewidth=2, label='Player')
         
+        # 5.5. 绘制战术可视化层
+        self._draw_tactic_overlay(ax, enemies, tactic)
+        
         # 6. 绘制敌人
         self._draw_enemies(ax, enemies)
         
@@ -672,7 +712,7 @@ class BattlefieldRenderer:
             Line2D([0], [0], marker='o', color='w', markerfacecolor='orangered', 
                    markersize=9, label='Soldier (ID)', markeredgecolor='darkred', markeredgewidth=1.5),
             Line2D([0], [0], marker='D', color='w', markerfacecolor='deepskyblue', 
-                   markersize=11, label='Drone (ID)', markeredgecolor='navy', markeredgewidth=1.5),
+                   markersize=11, label='UAV (ID)', markeredgecolor='navy', markeredgewidth=1.5),
             Rectangle((0, 0), 1, 1, facecolor='dimgray', edgecolor='black', 
                      alpha=0.7, linewidth=1.5, label='Building'),
             Rectangle((0, 0), 1, 1, facecolor='lightgray', alpha=0.5, 
@@ -784,13 +824,13 @@ class BattlefieldRenderer:
             speed = enemy['speed']
             direction = enemy['direction']
             
-            # 绘制敌人图标（Drone显著增大）
+            # 绘制敌人图标（UAV显著增大）
             if enemy_type == 'soldier':
                 # 士兵：橙红色圆圈
                 ax.plot(x, z, 'o', color='orangered', markersize=14, 
                        markeredgecolor='darkred', markeredgewidth=2)
-            else:  # drone (无人机)
-                # Drone：深天蓝色菱形（25像素）
+            else:  # uav (无人机)
+                # UAV：深天蓝色菱形（25像素）
                 ax.plot(x, z, 'D', color='deepskyblue', markersize=25,
                        markeredgecolor='navy', markeredgewidth=2.5)
             
@@ -823,6 +863,243 @@ class BattlefieldRenderer:
                            edgecolor='orange', linewidth=1, alpha=0.8),
                    family='monospace')
     
+    def _draw_tactic_overlay(self, ax, enemies: List[Dict], tactic: str):
+        """绘制战术可视化覆盖层"""
+        if tactic == 'encirclement':
+            self._draw_encirclement_overlay(ax, enemies)
+        elif tactic == 'pincer':
+            self._draw_pincer_overlay(ax, enemies)
+        elif tactic == 'ambush':
+            self._draw_ambush_overlay(ax, enemies)
+        elif tactic == 'retreat':
+            self._draw_retreat_overlay(ax, enemies)
+        elif tactic == 'frontal_assault':
+            self._draw_frontal_assault_overlay(ax, enemies)
+        elif tactic == 'flanking':
+            self._draw_flanking_overlay(ax, enemies)
+        elif tactic == 'defensive':
+            self._draw_defensive_overlay(ax, enemies)
+        elif tactic == 'guerrilla':
+            self._draw_guerrilla_overlay(ax, enemies)
+        elif tactic == 'pursuit':
+            self._draw_pursuit_overlay(ax, enemies)
+        elif tactic == 'dispersed':
+            self._draw_dispersed_overlay(ax, enemies)
+    
+    def _draw_encirclement_overlay(self, ax, enemies: List[Dict]):
+        """绘制包围战术：环形箭头指向中心"""
+        # 绘制6个环形弧形箭头指向中心
+        num_arcs = 6
+        for i in range(num_arcs):
+            angle = i * 60  # 每60度一个弧
+            start_angle = angle - 15
+            end_angle = angle + 15
+            
+            # 绘制弧形
+            arc = Arc((0, 0), 40, 40, angle=0, 
+                     theta1=start_angle, theta2=end_angle,
+                     color='purple', linewidth=3, alpha=0.5, linestyle='-')
+            ax.add_patch(arc)
+            
+            # 在弧形末端添加箭头指向中心
+            angle_rad = np.radians(angle)
+            arrow_start_r = 20
+            arrow_end_r = 15
+            
+            start_x = arrow_start_r * np.cos(angle_rad)
+            start_z = arrow_start_r * np.sin(angle_rad)
+            end_x = arrow_end_r * np.cos(angle_rad)
+            end_z = arrow_end_r * np.sin(angle_rad)
+            
+            arrow = FancyArrow(start_x, start_z, end_x - start_x, end_z - start_z,
+                             width=1.5, head_width=3, head_length=2,
+                             fc='purple', ec='purple', alpha=0.5)
+            ax.add_patch(arrow)
+    
+    def _draw_pincer_overlay(self, ax, enemies: List[Dict]):
+        """绘制钳形攻势：左右两侧弧形箭头"""
+        # 左侧弧形箭头
+        arc_left = Arc((-15, 0), 50, 60, angle=0, 
+                      theta1=90, theta2=180,
+                      color='darkred', linewidth=4, alpha=0.6)
+        ax.add_patch(arc_left)
+        
+        # 左侧箭头
+        arrow_left = FancyArrow(-25, 0, 15, 0,
+                               width=2, head_width=4, head_length=3,
+                               fc='darkred', ec='darkred', alpha=0.6)
+        ax.add_patch(arrow_left)
+        
+        # 右侧弧形箭头
+        arc_right = Arc((15, 0), 50, 60, angle=0, 
+                       theta1=0, theta2=90,
+                       color='darkred', linewidth=4, alpha=0.6)
+        ax.add_patch(arc_right)
+        
+        # 右侧箭头
+        arrow_right = FancyArrow(25, 0, -15, 0,
+                                width=2, head_width=4, head_length=3,
+                                fc='darkred', ec='darkred', alpha=0.6)
+        ax.add_patch(arrow_right)
+    
+    def _draw_ambush_overlay(self, ax, enemies: List[Dict]):
+        """绘制伏击战术：虚线箭头从集中区域突袭"""
+        if not enemies:
+            return
+        
+        # 计算敌人的平均位置
+        avg_x = np.mean([e['x'] for e in enemies])
+        avg_z = np.mean([e['z'] for e in enemies])
+        
+        # 从平均位置指向中心的虚线箭头
+        dx = -avg_x * 0.6
+        dz = -avg_z * 0.6
+        
+        arrow = FancyArrow(avg_x, avg_z, dx, dz,
+                          width=2, head_width=4, head_length=3,
+                          fc='orange', ec='orange', alpha=0.5, 
+                          linestyle='--', linewidth=2)
+        ax.add_patch(arrow)
+        
+        # 添加突袭标记圆圈
+        circle = Circle((avg_x, avg_z), 8, fill=False, 
+                       edgecolor='orange', linewidth=2, 
+                       linestyle='--', alpha=0.5)
+        ax.add_patch(circle)
+    
+    def _draw_retreat_overlay(self, ax, enemies: List[Dict]):
+        """绘制撤退战术：从中心向外发散的箭头"""
+        # 绘制8个方向的撤退箭头
+        for i in range(8):
+            angle = i * 45
+            angle_rad = np.radians(angle)
+            
+            start_r = 5
+            arrow_length = 15
+            
+            start_x = start_r * np.cos(angle_rad)
+            start_z = start_r * np.sin(angle_rad)
+            dx = arrow_length * np.cos(angle_rad)
+            dz = arrow_length * np.sin(angle_rad)
+            
+            arrow = FancyArrow(start_x, start_z, dx, dz,
+                             width=1.5, head_width=3, head_length=2,
+                             fc='gray', ec='gray', alpha=0.4)
+            ax.add_patch(arrow)
+    
+    def _draw_frontal_assault_overlay(self, ax, enemies: List[Dict]):
+        """绘制正面突击：前方宽箭头"""
+        # 大箭头从右侧指向中心
+        arrow = FancyArrow(30, 0, -20, 0,
+                          width=8, head_width=12, head_length=5,
+                          fc='red', ec='darkred', alpha=0.5, linewidth=2)
+        ax.add_patch(arrow)
+        
+        # 波次标记线
+        for i in range(3):
+            x_pos = 25 - i * 5
+            ax.plot([x_pos, x_pos], [-8, 8], 
+                   color='red', linewidth=2, alpha=0.4, linestyle='--')
+    
+    def _draw_flanking_overlay(self, ax, enemies: List[Dict]):
+        """绘制侧翼包抄：侧面弧形箭头"""
+        # 随机选择左侧或右侧（基于第一个敌人位置）
+        if enemies and enemies[0]['x'] < 0:
+            # 左侧包抄
+            arc = Arc((0, 0), 60, 50, angle=-45, 
+                     theta1=180, theta2=270,
+                     color='darkorange', linewidth=4, alpha=0.6)
+            ax.add_patch(arc)
+            
+            arrow = FancyArrow(-20, -15, 15, 10,
+                              width=2, head_width=4, head_length=3,
+                              fc='darkorange', ec='darkorange', alpha=0.6)
+            ax.add_patch(arrow)
+        else:
+            # 右侧包抄
+            arc = Arc((0, 0), 60, 50, angle=45, 
+                     theta1=270, theta2=360,
+                     color='darkorange', linewidth=4, alpha=0.6)
+            ax.add_patch(arc)
+            
+            arrow = FancyArrow(20, -15, -15, 10,
+                              width=2, head_width=4, head_length=3,
+                              fc='darkorange', ec='darkorange', alpha=0.6)
+            ax.add_patch(arrow)
+    
+    def _draw_defensive_overlay(self, ax, enemies: List[Dict]):
+        """绘制防御阵型：防御阵地连接线"""
+        if len(enemies) < 2:
+            return
+        
+        # 绘制防御圆圈
+        circle = Circle((0, 0), 15, fill=False, 
+                       edgecolor='darkgreen', linewidth=3, 
+                       linestyle='--', alpha=0.5)
+        ax.add_patch(circle)
+        
+        # 连接相邻敌人位置的虚线
+        for i in range(min(len(enemies), 8)):
+            for j in range(i + 1, min(len(enemies), 8)):
+                e1, e2 = enemies[i], enemies[j]
+                dist = np.sqrt((e1['x'] - e2['x'])**2 + (e1['z'] - e2['z'])**2)
+                if dist < 15:  # 只连接距离近的敌人
+                    ax.plot([e1['x'], e2['x']], [e1['z'], e2['z']],
+                           color='darkgreen', linewidth=1.5, 
+                           alpha=0.3, linestyle=':')
+    
+    def _draw_guerrilla_overlay(self, ax, enemies: List[Dict]):
+        """绘制游击骚扰：不规则移动轨迹"""
+        if len(enemies) < 3:
+            return
+        
+        # 绘制随机连接线表示游击路径
+        sample_enemies = random.sample(enemies, min(len(enemies), 6))
+        for i in range(len(sample_enemies) - 1):
+            e1, e2 = sample_enemies[i], sample_enemies[i + 1]
+            ax.plot([e1['x'], e2['x']], [e1['z'], e2['z']],
+                   color='yellowgreen', linewidth=2, 
+                   alpha=0.4, linestyle='--')
+        
+        # 添加游击标记圈
+        for e in sample_enemies[::2]:
+            circle = Circle((e['x'], e['z']), 3, fill=False,
+                           edgecolor='yellowgreen', linewidth=1.5,
+                           alpha=0.4, linestyle=':')
+            ax.add_patch(circle)
+    
+    def _draw_pursuit_overlay(self, ax, enemies: List[Dict]):
+        """绘制追击战术：后方追击箭头"""
+        # 大箭头从后方（-X方向）追击
+        arrow = FancyArrow(-30, 0, 20, 0,
+                          width=6, head_width=10, head_length=4,
+                          fc='darkblue', ec='navy', alpha=0.5, linewidth=2)
+        ax.add_patch(arrow)
+        
+        # 追击速度线
+        for i in range(-2, 3):
+            ax.plot([-35, -30], [i * 3, i * 3],
+                   color='darkblue', linewidth=1.5, alpha=0.4)
+    
+    def _draw_dispersed_overlay(self, ax, enemies: List[Dict]):
+        """绘制分散机动：辐射状箭头"""
+        # 绘制8个辐射方向的箭头
+        for i in range(8):
+            angle = i * 45 + 22.5  # 偏移22.5度
+            angle_rad = np.radians(angle)
+            
+            start_r = 8
+            arrow_length = 12
+            
+            start_x = start_r * np.cos(angle_rad)
+            start_z = start_r * np.sin(angle_rad)
+            dx = arrow_length * np.cos(angle_rad)
+            dz = arrow_length * np.sin(angle_rad)
+            
+            arrow = FancyArrow(start_x, start_z, dx, dz,
+                             width=1.2, head_width=2.5, head_length=2,
+                             fc='cyan', ec='darkcyan', alpha=0.5)
+            ax.add_patch(arrow)
 
 
 # ==================== 主生成器 ====================
@@ -835,7 +1112,7 @@ def generate_all_images(terrain_file: str, output_dir: str):
     print(f"地形文件: {terrain_file}")
     print(f"输出目录: {output_dir}")
     print(f"战术类型: {len(TACTICS)}种")
-    print(f"总图片数: {len(TACTICS) * 3}张")
+    print(f"总图片数: {len(TACTICS) * 2}张")
     print("=" * 60)
     
     # 1. 解析地形
@@ -857,9 +1134,8 @@ def generate_all_images(terrain_file: str, output_dir: str):
     all_data = []
     
     image_types = [
-        ('type1', 3, SPEED_NORMAL, 'Type1_Sparse'),
-        ('type2', 15, SPEED_NORMAL, 'Type2_Dense'),
-        ('type3', 15, SPEED_FAST, 'Type3_Fast')
+        ('type1', 5, SPEED_NORMAL, 'Type1_Sparse'),
+        ('type2', 20, SPEED_NORMAL, 'Type2_Dense')
     ]
     
     for type_name, num_enemies, speed_range, type_label in image_types:
@@ -881,7 +1157,7 @@ def generate_all_images(terrain_file: str, output_dir: str):
             title = f'{type_label} - Tactic: {tactic.upper()} ({tactic_cn}) - {num_enemies} Enemies'
             
             # 渲染图片
-            renderer.render(enemies, title, filename)
+            renderer.render(enemies, tactic, title, filename)
             
             # 保存数据
             image_data = {
