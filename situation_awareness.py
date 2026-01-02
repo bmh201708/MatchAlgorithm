@@ -1,4 +1,4 @@
-"""态势感知模块 - 计算八个方向的威胁度"""
+"""态势感知模块 - 计算十六个方向的威胁度"""
 import math
 import logging
 from typing import Dict, Tuple, List
@@ -7,16 +7,43 @@ from direction_mapper import calculate_direction_angle, angle_to_motor_id
 
 logger = logging.getLogger(__name__)
 
-# 方向角度范围（每个方向覆盖45度）
+# 导入IFS威胁评估器
+ifs_adapter_for_direction = None
+try:
+    from threat_analyzer_ifs import IFSThreatAnalyzerAdapter
+    try:
+        from config import TERRAIN_DATA_PATH, ENABLE_TERRAIN_ANALYSIS
+        import os
+        terrain_path = None
+        if ENABLE_TERRAIN_ANALYSIS and os.path.exists(TERRAIN_DATA_PATH):
+            terrain_path = TERRAIN_DATA_PATH
+        ifs_adapter_for_direction = IFSThreatAnalyzerAdapter(terrain_path)
+        logger.info("✓ IFS adapter for direction threats initialized")
+    except Exception as e:
+        logger.warning(f"IFS adapter initialization failed: {e}, using fallback method")
+        ifs_adapter_for_direction = None
+except ImportError:
+    ifs_adapter_for_direction = None
+    logger.warning("IFS module not available, using simple algorithm for direction threats")
+
+# 方向角度范围（每个方向覆盖22.5度）
 DIRECTION_RANGES = {
-    0: (337.5, 22.5),   # 正前方 (0° ±22.5°)
-    1: (22.5, 67.5),    # 前右 (45° ±22.5°)
-    2: (67.5, 112.5),   # 正右 (90° ±22.5°)
-    3: (112.5, 157.5), # 后右 (135° ±22.5°)
-    4: (157.5, 202.5), # 正后 (180° ±22.5°)
-    5: (202.5, 247.5), # 后左 (225° ±22.5°)
-    6: (247.5, 292.5), # 正左 (270° ±22.5°)
-    7: (292.5, 337.5)  # 前左 (315° ±22.5°)
+    0: (348.75, 11.25),    # 正北 (0° ±11.25°)
+    1: (11.25, 33.75),     # 北偏东 (22.5° ±11.25°)
+    2: (33.75, 56.25),     # 东北 (45° ±11.25°)
+    3: (56.25, 78.75),     # 东偏北 (67.5° ±11.25°)
+    4: (78.75, 101.25),    # 正东 (90° ±11.25°)
+    5: (101.25, 123.75),   # 东偏南 (112.5° ±11.25°)
+    6: (123.75, 146.25),   # 东南 (135° ±11.25°)
+    7: (146.25, 168.75),   # 南偏东 (157.5° ±11.25°)
+    8: (168.75, 191.25),   # 正南 (180° ±11.25°)
+    9: (191.25, 213.75),   # 南偏西 (202.5° ±11.25°)
+    10: (213.75, 236.25),  # 西南 (225° ±11.25°)
+    11: (236.25, 258.75),  # 西偏南 (247.5° ±11.25°)
+    12: (258.75, 281.25),  # 正西 (270° ±11.25°)
+    13: (281.25, 303.75),  # 西偏北 (292.5° ±11.25°)
+    14: (303.75, 326.25),  # 西北 (315° ±11.25°)
+    15: (326.25, 348.75)   # 北偏西 (337.5° ±11.25°)
 }
 
 # 类型威胁因子
@@ -72,13 +99,13 @@ def is_angle_in_range(angle: float, range_start: float, range_end: float) -> boo
         return angle >= range_start or angle < range_end
 
 
-def calculate_target_threat_score(
+def calculate_target_threat_score_simple(
     target: Target,
     player_pos: Position,
     direction_angle: float
 ) -> float:
     """
-    计算单个目标对特定方向的威胁度
+    使用简单算法计算单个目标对特定方向的威胁度（降级方案）
     
     Args:
         target: 目标对象
@@ -142,27 +169,115 @@ def calculate_target_threat_score(
     return threat_score
 
 
+def calculate_target_threat_score_with_ifs(
+    target: Target,
+    player_pos: Position,
+    direction_angle: float
+) -> float:
+    """
+    使用IFS方法计算单个目标对特定方向的威胁度
+    
+    Args:
+        target: 目标对象
+        player_pos: 玩家位置
+        direction_angle: 目标方向的角度（0-360度）
+    
+    Returns:
+        威胁度分数
+    """
+    if not ifs_adapter_for_direction:
+        # 降级到简单算法
+        return calculate_target_threat_score_simple(target, player_pos, direction_angle)
+    
+    try:
+        # 创建临时GameData对象（只包含当前目标）
+        game_data = GameData(
+            round="temp",
+            playerPosition=player_pos,
+            targets=[target],
+            situationAwareness=False
+        )
+        
+        # 使用IFS评估器
+        result_target, result_details = ifs_adapter_for_direction.find_most_threatening(game_data)
+        
+        if result_details:
+            # 提取综合威胁得分
+            threat_score = result_details['comprehensive_threat_score']
+            
+            # 应用角度衰减因子（目标偏离方向中心时降低威胁度）
+            target_angle = calculate_direction_angle(player_pos, target.position)
+            angle_offset = abs(target_angle - direction_angle)
+            if angle_offset > 180:
+                angle_offset = 360 - angle_offset
+            
+            # 角度衰减：偏离11.25度（方向范围的一半）时开始衰减
+            angle_decay = max(0.1, 1.0 - (angle_offset / 22.5))
+            
+            final_score = threat_score * angle_decay
+            
+            logger.debug(
+                f"Target {target.id} IFS threat to direction {direction_angle:.1f}°: "
+                f"base_score={threat_score:.4f}, angle_offset={angle_offset:.1f}°, "
+                f"angle_decay={angle_decay:.3f}, final_score={final_score:.4f}"
+            )
+            
+            return final_score
+        else:
+            return calculate_target_threat_score_simple(target, player_pos, direction_angle)
+            
+    except Exception as e:
+        logger.warning(f"IFS evaluation failed for direction threat: {e}")
+        return calculate_target_threat_score_simple(target, player_pos, direction_angle)
+
+
+def calculate_target_threat_score(
+    target: Target,
+    player_pos: Position,
+    direction_angle: float,
+    use_ifs: bool = True
+) -> float:
+    """
+    计算单个目标对特定方向的威胁度（统一入口）
+    
+    Args:
+        target: 目标对象
+        player_pos: 玩家位置
+        direction_angle: 目标方向的角度（0-360度）
+        use_ifs: 是否使用IFS方法，默认True
+    
+    Returns:
+        威胁度分数
+    """
+    if use_ifs and ifs_adapter_for_direction:
+        return calculate_target_threat_score_with_ifs(target, player_pos, direction_angle)
+    else:
+        return calculate_target_threat_score_simple(target, player_pos, direction_angle)
+
+
 def calculate_direction_threat_score(
     game_data: GameData,
-    direction_id: int
+    direction_id: int,
+    use_ifs: bool = True
 ) -> float:
     """
     计算特定方向的综合威胁度
     
     Args:
         game_data: 游戏数据对象
-        direction_id: 方向ID（0-7）
+        direction_id: 方向ID（0-15）
+        use_ifs: 是否使用IFS方法，默认True
     
     Returns:
         该方向的综合威胁度分数
     """
-    if direction_id < 0 or direction_id > 7:
+    if direction_id < 0 or direction_id > 15:
         logger.warning(f"Invalid direction_id: {direction_id}")
         return 0.0
     
     # 获取该方向的角度范围
     range_start, range_end = DIRECTION_RANGES[direction_id]
-    direction_center_angle = direction_id * 45.0  # 方向中心角度
+    direction_center_angle = direction_id * 22.5  # 方向中心角度
     
     total_threat = 0.0
     target_count = 0
@@ -178,7 +293,8 @@ def calculate_direction_threat_score(
             threat_score = calculate_target_threat_score(
                 target,
                 game_data.playerPosition,
-                direction_center_angle
+                direction_center_angle,
+                use_ifs=use_ifs
             )
             total_threat += threat_score
     
@@ -200,17 +316,17 @@ def calculate_all_directions_threat(
     game_data: GameData
 ) -> Dict[int, float]:
     """
-    计算所有八个方向的威胁度
+    计算所有16个方向的威胁度
     
     Args:
         game_data: 游戏数据对象
     
     Returns:
-        字典，键为方向ID（0-7），值为威胁度分数
+        字典，键为方向ID（0-15），值为威胁度分数
     """
     direction_threats = {}
     
-    for direction_id in range(8):
+    for direction_id in range(16):
         threat_score = calculate_direction_threat_score(game_data, direction_id)
         direction_threats[direction_id] = threat_score
     
@@ -233,7 +349,7 @@ def normalize_threat_to_intensity(
         threshold: 威胁度阈值，低于此值不震动
     
     Returns:
-        字典，键为方向ID（0-7），值为震动强度（0或min_intensity-max_intensity）
+        字典，键为方向ID（0-15），值为震动强度（0或min_intensity-max_intensity）
     
     说明：
         - 威胁度 < threshold：不震动（intensity = 0）
@@ -241,17 +357,17 @@ def normalize_threat_to_intensity(
         - 这样确保所有有效震动都能被用户感知到
     """
     if not threat_scores:
-        return {i: 0 for i in range(8)}
+        return {i: 0 for i in range(16)}
     
     # 找到最大威胁度（用于归一化）
     max_threat = max(threat_scores.values()) if threat_scores.values() else 0.0
     
     if max_threat <= 0:
-        return {i: 0 for i in range(8)}
+        return {i: 0 for i in range(16)}
     
     # 归一化并映射到震动强度
     intensities = {}
-    for direction_id in range(8):
+    for direction_id in range(16):
         threat = threat_scores.get(direction_id, 0.0)
         
         if threat < threshold:
@@ -267,10 +383,18 @@ def normalize_threat_to_intensity(
     logger.info("=" * 60)
     logger.info("🎯 Situation Awareness - Direction Threat Analysis")
     logger.info("=" * 60)
-    for direction_id in range(8):
+    
+    direction_names = [
+        "正北", "北偏东", "东北", "东偏北",
+        "正东", "东偏南", "东南", "南偏东",
+        "正南", "南偏西", "西南", "西偏南",
+        "正西", "西偏北", "西北", "北偏西"
+    ]
+    
+    for direction_id in range(16):
         threat = threat_scores.get(direction_id, 0.0)
         intensity = intensities.get(direction_id, 0)
-        direction_name = ["正前", "前右", "正右", "后右", "正后", "后左", "正左", "前左"][direction_id]
+        direction_name = direction_names[direction_id]
         logger.info(
             f"  Direction {direction_id} ({direction_name}): "
             f"Threat={threat:.4f}, Intensity={intensity}"
